@@ -2,6 +2,11 @@
 
 Mais recente primeiro. PATCH a cada envio ao GitHub; MAJOR/MINOR só quando pedido.
 
+## 0.1.3 — 2026-11-19
+
+- Dicas (tooltips) no padrão BMsoft em todo o app: caixa escura com seta no lugar da dica nativa do navegador.
+- Nova tela Configurações (só administrador) com a configuração dos módulos por grupo; aba Estoque com a fonte das imagens (Google ou Serper e chave da API).
+
 ## 0.1.2 — 2026-11-11
 
 Ajustes gerais.

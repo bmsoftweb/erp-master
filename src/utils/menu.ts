@@ -1,4 +1,4 @@
-import { LayoutDashboard, Network, Package, Shield, Users, type LucideIcon } from 'lucide-react';
+import { LayoutDashboard, Network, Package, Settings, Shield, Users, type LucideIcon } from 'lucide-react';
 import type { Usuario } from '../types';
 
 export interface ItemMenu {
@@ -22,7 +22,13 @@ export const GRUPOS_MENU: { titulo: string; itens: ItemMenu[] }[] = [
       { id: 'perfis', label: 'Perfis', descricao: 'Perfis de acesso dos usuários', icone: Shield, soSuper: true },
     ],
   },
-  { titulo: 'Sistemas', itens: [{ id: 'modulos', label: 'Módulos', descricao: 'Selecione um módulo para acessar as ferramentas de gestão', icone: Package }] },
+  {
+    titulo: 'Sistemas',
+    itens: [
+      { id: 'modulos', label: 'Módulos', descricao: 'Selecione um módulo para acessar as ferramentas de gestão', icone: Package },
+      { id: 'configuracoes', label: 'Configurações', descricao: 'Configurações dos módulos por grupo', icone: Settings, soAdmin: true },
+    ],
+  },
 ];
 
 export const NOME_PAPEL: Record<string, string> = { super: 'Super Admin', admin: 'Administrador', user: 'Operador' };

@@ -291,6 +291,44 @@ export function createApp() {
   gravacao('grupos', 'sys_grupos', (b) => ({ nome: texto(b.nome, 'Nome do grupo', 100, true), ativo: flag(b.ativo) }));
   inativar('grupos', 'sys_grupos');
 
+  // ---------- Configurações dos módulos por grupo (sys_grupos.config, JSON com uma chave por módulo) ----------
+  // Super: qualquer grupo; admin: só o dele. Gravar um módulo não mexe nas chaves dos outros.
+  const lerConfigGrupo = async (grupoId: number): Promise<Record<string, any>> => {
+    const [[g]] = await pool.query<Linha[]>('SELECT config FROM sys_grupos WHERE id = ?', [grupoId]);
+    if (!g) throw new ErroApi(404, 'Grupo não encontrado.');
+    try {
+      const obj = JSON.parse(String(g.config || '{}'));
+      return obj && typeof obj === 'object' && !Array.isArray(obj) ? obj : {};
+    } catch {
+      return {};
+    }
+  };
+  /** Valida o que cada módulo grava; módulo novo = entrada nova aqui e aba nova em Configuracoes.tsx */
+  const CONFIG_MODULOS: Record<string, (b: Record<string, unknown>) => Record<string, unknown>> = {
+    estoque: (b) => {
+      const fonte = String(b.imagens_fonte || 'google');
+      if (fonte !== 'google' && fonte !== 'serper') throw new ErroApi(400, 'Fonte das imagens inválida.');
+      const chave = texto(b.serper_api_key, 'Chave da API Serper', 100);
+      if (fonte === 'serper' && !chave) throw new ErroApi(400, 'Informe a chave da API Serper.');
+      return { imagens_fonte: fonte, serper_api_key: chave };
+    },
+  };
+  app.get(
+    '/api/grupos/:id/config',
+    rota(async (req, res) => lerConfigGrupo(grupoPermitido(res, id(req.params.id)))),
+  );
+  app.put(
+    '/api/grupos/:id/config/:modulo',
+    rota(async (req, res) => {
+      const grupoId = grupoPermitido(res, id(req.params.id));
+      const validar = CONFIG_MODULOS[req.params.modulo];
+      if (!validar) throw new ErroApi(400, 'Módulo sem configuração.');
+      const json = JSON.stringify({ ...(await lerConfigGrupo(grupoId)), [req.params.modulo]: validar(req.body || {}) });
+      if (json.length > 60_000) throw new ErroApi(413, 'Configuração muito grande.');
+      await pool.query('UPDATE sys_grupos SET config = ? WHERE id = ?', [json, grupoId]);
+    }),
+  );
+
   // ---------- Empresas (admin: só vê as do grupo dele) ----------
   app.get(
     '/api/empresas',

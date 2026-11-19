@@ -46,6 +46,10 @@ export const salvarCadastro = (cadastro: Cadastro, id: number | null, dados: obj
   chamar<{ id: number }>(id !== null ? 'PUT' : 'POST', id !== null ? `/api/${cadastro}/${id}` : `/api/${cadastro}`, dados);
 export const excluirCadastro = (cadastro: Cadastro, id: number) => chamar<void>('DELETE', `/api/${cadastro}/${id}`);
 
+// ---------- Configurações dos módulos por grupo (sys_grupos.config) ----------
+export const lerConfigGrupo = (grupoId: number) => get<Record<string, any>>(`/api/grupos/${grupoId}/config`);
+export const salvarConfigGrupo = (grupoId: number, modulo: string, dados: object) => chamar<void>('PUT', `/api/grupos/${grupoId}/config/${modulo}`, dados);
+
 // ---------- Preferências das listas e formulários (sys_usuarios.config_listas) ----------
 // Lidas uma vez por sessão e gravadas por chave. Se a leitura falhar, nada é gravado: um PUT só com uma chave
 // apagaria as demais.

@@ -8,6 +8,7 @@ import { Empresas } from './components/Empresas';
 import { Perfis } from './components/Perfis';
 import { Usuarios } from './components/Usuarios';
 import { Modulos } from './components/Modulos';
+import { Configuracoes } from './components/Configuracoes';
 import { AvisoErro } from './components/AvisoErro';
 import { BarraAbas, type AbaModulo } from './components/BarraAbas';
 import { linkModulo, revalidarSessao, setAoExpirarSessao, setTokenSessao } from './services/api';
@@ -169,6 +170,7 @@ export default function App() {
             {tela === 'usuarios' && <Usuarios usuario={usuario} />}
             {tela === 'perfis' && <Perfis />}
             {tela === 'modulos' && <Modulos onAbrir={abrirModulo} />}
+            {tela === 'configuracoes' && <Configuracoes />}
           </AbrirMenuMobile.Provider>
         </div>
       </div>

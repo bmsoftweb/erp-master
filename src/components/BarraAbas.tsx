@@ -13,9 +13,9 @@ export interface AbaModulo {
 }
 
 // Visual padrão das abas BMsoft (BarraAbas do receitaWeb / contratos-dbisam): chapadas, sem espaço entre elas
-const abaClasse = (ativa: boolean) =>
+export const abaClasse = (ativa: boolean) =>
   `flex items-center gap-1.5 border-r border-stone-200 dark:border-stone-800 border-b-2 transition-colors ${ativa ? 'bg-white dark:bg-stone-900 border-b-amber-600' : 'border-b-transparent hover:bg-stone-200/60 dark:hover:bg-stone-800/60'}`;
-const abaTexto = (ativa: boolean) =>
+export const abaTexto = (ativa: boolean) =>
   `flex items-center gap-2 py-2.5 text-xs font-semibold whitespace-nowrap cursor-pointer ${ativa ? 'text-amber-700 dark:text-amber-400' : 'text-stone-600 dark:text-stone-400'}`;
 const ICONE = 'p-1 rounded text-stone-400 transition-colors cursor-pointer shrink-0';
 
