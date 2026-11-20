@@ -17,6 +17,26 @@ bm-estoque (ERP BMsoft): só tabelas `sys_*`.
   `master_listas` (o resto do JSON é do Romaneio e do estoque).
 - Empresas não tem item no menu: abre pela ação "Empresas" da lista de Grupos, sempre filtrada pelo grupo (sem
   desfiltrar; "← Grupos" ou o menu voltam).
+- Configurações (`sys_grupos.config`, uma aba por módulo) também não tem item no menu: abre pela ação "Configurações"
+  da lista de Grupos, sempre de um grupo. A aba Pesquisas (campos extras das pesquisas do erp-vendas,
+  `ven_pesquisa_campos`) é só do super. O catálogo e o SQL das pesquisas ficam em `server/pesquisaCatalogo.ts`, cópia
+  idêntica do arquivo do erp-vendas (mudou num, copie para o outro). "Ver SQL" mostra e edita a consulta que o
+  erp-vendas roda para o grupo: o SQL próprio (marcadores `:empresa`, `{filtros}`, `{busca}`) fica em
+  `sys_grupos.config.pesquisas_sql.<pesquisa>`, só SELECT, testado antes de gravar e rodado em transação somente
+  leitura; se falhar no erp-vendas, ele usa o padrão e registra no log. A aba "Raw" mostra o SQL final (só leitura,
+  para copiar), com a primeira filial do grupo e a busca de exemplo no lugar dos marcadores. "Voltar Padrão" apaga o SQL próprio. "Criar Pesquisa" grava os campos do sistema (linhas sem tabela, chave do
+  catálogo, lista em `PADRAO_PESQUISA`) para renomear, mudar a pesquisa ou desligar; "Voltar ao Padrão"
+  apaga todos os campos da pesquisa no grupo. A coluna que um campo do sistema mostra (`usa`) nunca vira campo extra:
+  no "Novo" ela aparece marcada "(campo do sistema: …)" enquanto a linha dele não existir no grupo, e gravá-la grava
+  o campo do sistema.
+- Configurações da empresa (`ConfiguracoesEmpresa.tsx`) abre pela ação "Configurações" da lista de Empresas, uma aba
+  por assunto. Aba Certificados: o A1 (.pfx) da empresa em `sys_empresas_certificados` (um por empresa; o erp-nfe e
+  o erp-nfs só leem dali, quem grava é o Master; senha em texto, como eles esperam). A senha é conferida antes
+  (`server/certificado.ts`, cópia idêntica do erp-nfe, com `node-forge`) e nenhuma API devolve arquivo nem senha.
+  Super: qualquer empresa; admin: só as do grupo dele. Cópia das tabelas antigas (`nfe_certificados`,
+  `nfs_certificados`) em `../extras/2026-11-19_certificados_sys_empresas.sql`.
+- Desenvolvedor (menu Cadastros, só o super): empresa desenvolvedora e arquitetura do PAF-NFC-e em `sys_paf`, uma
+  linha só (`id = 1`) para todo o ERP; o erp-pdv lê dali o Menu Fiscal, o U2 do Arquivo I e o arqBD/arqSist do XML.
 - Tabelas: Grupos → `sys_grupos`; Empresas → `sys_empresas`; Usuários → `sys_usuarios` + `sys_usuarios_empresas`
   (empresas liberadas); Perfis → `sys_perfis`; Módulos → `sys_modulos`. Excluir grupo, empresa ou usuário é lógico
   (`ativo = 0`); perfil (sem `ativo`) é apagado, e a chave estrangeira recusa se estiver em uso. O código 0 é válido

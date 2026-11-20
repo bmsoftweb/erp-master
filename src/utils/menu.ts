@@ -1,4 +1,4 @@
-import { LayoutDashboard, Network, Package, Settings, Shield, Users, type LucideIcon } from 'lucide-react';
+import { Code2, LayoutDashboard, Network, Package, Shield, Users, type LucideIcon } from 'lucide-react';
 import type { Usuario } from '../types';
 
 export interface ItemMenu {
@@ -20,13 +20,13 @@ export const GRUPOS_MENU: { titulo: string; itens: ItemMenu[] }[] = [
       { id: 'grupos', label: 'Grupos', descricao: 'Grupos de empresas', icone: Network, soAdmin: true },
       { id: 'usuarios', label: 'Usuários', descricao: 'Login do Master e dos módulos', icone: Users, soAdmin: true },
       { id: 'perfis', label: 'Perfis', descricao: 'Perfis de acesso dos usuários', icone: Shield, soSuper: true },
+      { id: 'desenvolvedor', label: 'Desenvolvedor', descricao: 'Empresa desenvolvedora do PAF-NFC-e', icone: Code2, soSuper: true },
     ],
   },
   {
     titulo: 'Sistemas',
     itens: [
       { id: 'modulos', label: 'Módulos', descricao: 'Selecione um módulo para acessar as ferramentas de gestão', icone: Package },
-      { id: 'configuracoes', label: 'Configurações', descricao: 'Configurações dos módulos por grupo', icone: Settings, soAdmin: true },
     ],
   },
 ];

@@ -2,6 +2,15 @@
 
 Mais recente primeiro. PATCH a cada envio ao GitHub; MAJOR/MINOR só quando pedido.
 
+## 0.1.4 — 2026-11-20
+
+- Configurações do grupo saem do menu e abrem pela ação "Configurações" da lista de Grupos.
+- Nova aba Pesquisas (só super) nas Configurações do grupo: campos extras das pesquisas do erp-vendas, criar/voltar ao padrão os campos do sistema e SQL próprio da pesquisa ("Ver SQL", testado antes de gravar, e aba "Raw" com o SQL final).
+- Empresas: nova ação "Configurações" com a aba Certificados — o A1 (.pfx) da empresa, com a senha conferida antes de gravar, em `sys_empresas_certificados` (lido pelo erp-nfe e pelo erp-nfs). Cópia dos certificados antigos em `extras/2026-11-19_certificados_sys_empresas.sql`.
+- Novo cadastro Desenvolvedor (só super): empresa desenvolvedora e arquitetura do PAF-NFC-e em `sys_paf`, lidas pelo erp-pdv.
+- Campos: no foco, moldura de 2px na cor da barra; selects com a lista arredondada e a seta em chevron.
+- Banco: conexões paradas são fechadas antes de serem reaproveitadas (evita ECONNRESET).
+
 ## 0.1.3 — 2026-11-19
 
 - Dicas (tooltips) no padrão BMsoft em todo o app: caixa escura com seta no lugar da dica nativa do navegador.

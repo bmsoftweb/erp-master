@@ -1,16 +1,19 @@
 import React, { useEffect, useState } from 'react';
-import { Package } from 'lucide-react';
+import { ArrowLeft, Package, Search } from 'lucide-react';
 import { Tela, Carregando } from './Tela';
 import { FormCrm, Campo, INPUT_CLASS, HINT_CLASS } from './FormCrm';
 import { Toast } from './AvisoErro';
 import { abaClasse, abaTexto } from './BarraAbas';
-import { lerConfigGrupo, listar, salvarConfigGrupo } from '../services/api';
-import type { Grupo } from '../types';
+import { lerConfigGrupo, salvarConfigGrupo } from '../services/api';
+import { PesquisaCampos } from './PesquisaCampos';
+import { ehSuper } from '../utils/menu';
+import type { Grupo, Usuario } from '../types';
 
 /**
- * Configurações dos módulos por grupo (sys_grupos.config, JSON com uma chave por módulo).
+ * Configurações dos módulos de um grupo (sys_grupos.config, JSON com uma chave por módulo): abre pela ação
+ * "Configurações" da lista de Grupos, como Empresas (o admin só vê o próprio grupo).
  * Uma aba por módulo; módulo novo = aba aqui + validação em CONFIG_MODULOS (server/app.ts).
- * Super escolhe o grupo; o admin só vê o dele.
+ * A aba Pesquisas (campos das pesquisas do erp-vendas) é só do super.
  */
 
 interface ConfigEstoque {
@@ -18,30 +21,22 @@ interface ConfigEstoque {
   serper_api_key: string;
 }
 
-const ABAS = [{ id: 'estoque', titulo: 'Estoque', Icone: Package }] as const;
+const ABAS = [
+  { id: 'estoque', titulo: 'Estoque', Icone: Package, soSuper: false },
+  { id: 'pesquisas', titulo: 'Pesquisas', Icone: Search, soSuper: true },
+] as const;
 type Aba = (typeof ABAS)[number]['id'];
 
 const doEstoque = (c: any): ConfigEstoque => ({ imagens_fonte: c?.imagens_fonte === 'serper' ? 'serper' : 'google', serper_api_key: c?.serper_api_key || '' });
 
-export const Configuracoes: React.FC = () => {
-  const [grupos, setGrupos] = useState<Grupo[] | null>(null);
-  const [grupoId, setGrupoId] = useState<number | null>(null);
+export const Configuracoes: React.FC<{ usuario: Usuario; grupo: Grupo; onVoltar: () => void }> = ({ usuario, grupo, onVoltar }) => {
+  const grupoId = grupo.id;
   const [aba, setAba] = useState<Aba>('estoque');
   const [config, setConfig] = useState<Record<string, any> | null>(null);
   const [estoque, setEstoque] = useState<ConfigEstoque>(doEstoque(null));
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
-
-  useEffect(() => {
-    listar<Grupo>('grupos')
-      .then((g) => {
-        const ativos = g.filter((x) => x.ativo);
-        setGrupos(ativos);
-        if (ativos.length) setGrupoId(ativos[0].id);
-      })
-      .catch((e) => setErro(e.message));
-  }, []);
 
   const carregar = (id: number) => {
     setConfig(null);
@@ -52,13 +47,10 @@ export const Configuracoes: React.FC = () => {
       })
       .catch((e) => setErro(e.message));
   };
-  useEffect(() => {
-    if (grupoId !== null) carregar(grupoId);
-  }, [grupoId]);
+  useEffect(() => carregar(grupoId), [grupoId]);
 
   const salvar = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (grupoId === null) return;
     setSalvando(true);
     setErro(null);
     try {
@@ -71,26 +63,19 @@ export const Configuracoes: React.FC = () => {
     }
   };
 
-  const nomeGrupo = grupos?.find((g) => g.id === grupoId)?.nome;
-
   return (
     <Tela
       titulo="Configurações"
-      subtitulo={nomeGrupo ? `Configurações dos módulos do grupo ${nomeGrupo}` : 'Configurações dos módulos por grupo'}
+      subtitulo={`Configurações dos módulos do grupo ${grupo.nome}`}
       acoes={
-        grupos && grupos.length > 1 ? (
-          <select value={grupoId ?? ''} onChange={(e) => setGrupoId(Number(e.target.value))} className={INPUT_CLASS + ' !w-auto'} title="Grupo">
-            {grupos.map((g) => (
-              <option key={g.id} value={g.id}>
-                {g.nome}
-              </option>
-            ))}
-          </select>
-        ) : undefined
+        <button type="button" onClick={onVoltar} title="Volta para a lista de grupos" className="shrink-0 inline-flex items-center gap-1.5 h-[34px] px-3 rounded-md text-xs font-medium text-stone-600 dark:text-stone-300 border border-stone-300 dark:border-stone-700 cursor-pointer hover:bg-stone-100 dark:hover:bg-stone-800">
+          <ArrowLeft className="w-3.5 h-3.5" />
+          Grupos
+        </button>
       }
     >
       <div className="flex shrink-0 bg-stone-100 dark:bg-stone-950 border-b border-stone-200 dark:border-stone-800">
-        {ABAS.map(({ id, titulo, Icone }) => (
+        {ABAS.filter((a) => !a.soSuper || ehSuper(usuario)).map(({ id, titulo, Icone }) => (
           <div key={id} className={abaClasse(aba === id) + ' px-4'}>
             <button type="button" onClick={() => setAba(id)} className={abaTexto(aba === id)}>
               <Icone className="w-3.5 h-3.5" />
@@ -100,10 +85,10 @@ export const Configuracoes: React.FC = () => {
         ))}
       </div>
 
-      {!grupos || (grupoId !== null && !config) ? (
+      {aba === 'pesquisas' ? (
+        <PesquisaCampos grupoId={grupoId} />
+      ) : !config ? (
         <Carregando />
-      ) : grupoId === null ? (
-        <p className="p-8 text-center text-xs text-stone-400">Nenhum grupo ativo.</p>
       ) : (
         aba === 'estoque' && (
           <FormCrm

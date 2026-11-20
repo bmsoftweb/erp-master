@@ -50,6 +50,93 @@ export const excluirCadastro = (cadastro: Cadastro, id: number) => chamar<void>(
 export const lerConfigGrupo = (grupoId: number) => get<Record<string, any>>(`/api/grupos/${grupoId}/config`);
 export const salvarConfigGrupo = (grupoId: number, modulo: string, dados: object) => chamar<void>('PUT', `/api/grupos/${grupoId}/config/${modulo}`, dados);
 
+// ---------- Certificado digital A1 da empresa (sys_empresas_certificados: o erp-nfe e o erp-nfs leem dali) ----------
+/** Dados públicos do certificado (sem arquivo nem senha); datas "aaaa-mm-dd hh:mm:ss" */
+export interface Certificado {
+  nome_arquivo: string;
+  cnpj: string | null;
+  razao_social: string | null;
+  numero_serie: string | null;
+  emissor: string | null;
+  valido_de: string;
+  valido_ate: string;
+  /** Dias para vencer (negativo = vencido) */
+  dias: number;
+  atualizado_em: string;
+}
+export const lerCertificado = (empresaId: number) => get<{ certificado: Certificado | null }>(`/api/empresas/${empresaId}/certificado`);
+/** arquivo: .pfx em base64 */
+export const gravarCertificado = (empresaId: number, dados: { arquivo: string; nome: string; senha: string }) =>
+  chamar<void>('PUT', `/api/empresas/${empresaId}/certificado`, dados);
+export const removerCertificado = (empresaId: number) => chamar<void>('DELETE', `/api/empresas/${empresaId}/certificado`);
+
+// ---------- Desenvolvedor do PAF-NFC-e (sys_paf, uma linha para todo o ERP; só o super) ----------
+export interface Desenvolvedor {
+  desenvolvedor_razao: string;
+  desenvolvedor_cnpj: string;
+  desenvolvedor_ie: string;
+  desenvolvedor_im: string;
+  desenvolvedor_endereco: string;
+  desenvolvedor_telefone: string;
+  desenvolvedor_responsavel: string;
+  arq_bd: string;
+  arq_sist: string;
+  atualizado_em?: string | null;
+}
+export const lerDesenvolvedor = () => get<{ desenvolvedor: Desenvolvedor | null }>('/api/desenvolvedor');
+export const gravarDesenvolvedor = (d: Desenvolvedor) => chamar<void>('PUT', '/api/desenvolvedor', d);
+
+// ---------- Campos das pesquisas do erp-vendas por grupo (ven_pesquisa_campos; só o super) ----------
+export interface CampoPesquisa {
+  id: number;
+  pesquisa: string;
+  chave: string;
+  /** null = campo do sistema (chave do catálogo do erp-vendas) */
+  tabela: string | null;
+  coluna: string | null;
+  label: string;
+  formato: string | null;
+  busca: string | null;
+  visivel: number;
+  ativo: number;
+  buscavel: boolean;
+}
+export const tabelasPesquisa = () => get<Record<string, { tabela: string; rotulo: string }[]>>('/api/pesquisa-campos/tabelas');
+/** sistema = nome do campo do sistema que mostra a coluna (gravá-la grava esse campo) */
+export interface ColunaPesquisa {
+  coluna: string;
+  tipo: string;
+  sistema?: string;
+  formato?: string;
+  busca?: string;
+}
+export const colunasPesquisa = (grupoId: number, pesquisa: string, tabela: string) =>
+  get<ColunaPesquisa[]>(`/api/pesquisa-campos/colunas?grupo=${grupoId}&pesquisa=${encodeURIComponent(pesquisa)}&tabela=${encodeURIComponent(tabela)}`);
+export const listarCamposPesquisa = (grupoId: number, pesquisa: string) => get<CampoPesquisa[]>(`/api/grupos/${grupoId}/pesquisa-campos?pesquisa=${encodeURIComponent(pesquisa)}`);
+export const salvarCampoPesquisa = (grupoId: number, id: number | null, dados: object) =>
+  chamar<{ id: number }>(id !== null ? 'PUT' : 'POST', `/api/grupos/${grupoId}/pesquisa-campos${id !== null ? `/${id}` : ''}`, dados);
+export const excluirCampoPesquisa = (grupoId: number, id: number) => chamar<void>('DELETE', `/api/grupos/${grupoId}/pesquisa-campos/${id}`);
+// SQL da pesquisa: padrão (gerado) e próprio do grupo (sys_grupos.config → pesquisas_sql)
+export const lerSqlPesquisa = (grupoId: number, pesquisa: string) =>
+  get<{ padrao: string; proprio: string | null }>(`/api/grupos/${grupoId}/pesquisa-sql?pesquisa=${encodeURIComponent(pesquisa)}`);
+/** Roda o SQL só leitura: linhas e colunas do grid que faltam */
+export const testarSqlPesquisa = (grupoId: number, pesquisa: string, sql: string, busca: string) =>
+  chamar<{ linhas: number; faltam: string[] }>('POST', `/api/grupos/${grupoId}/pesquisa-sql/testar`, { pesquisa, sql, busca });
+/** Raw: o SQL final, com os marcadores trocados pelos valores (filial do grupo e busca de exemplo) */
+export const rawSqlPesquisa = (grupoId: number, pesquisa: string, sql: string, busca: string) =>
+  chamar<{ sql: string; empresa: number }>('POST', `/api/grupos/${grupoId}/pesquisa-sql/raw`, { pesquisa, sql, busca });
+/** Testa e grava o SQL próprio do grupo */
+export const salvarSqlPesquisa = (grupoId: number, pesquisa: string, sql: string) =>
+  chamar<{ linhas: number; faltam: string[] }>('PUT', `/api/grupos/${grupoId}/pesquisa-sql`, { pesquisa, sql });
+/** Voltar Padrão: apaga o SQL próprio */
+export const padraoSqlPesquisa = (grupoId: number, pesquisa: string) => chamar<void>('DELETE', `/api/grupos/${grupoId}/pesquisa-sql?pesquisa=${encodeURIComponent(pesquisa)}`);
+/** Criar Pesquisa: grava os campos do sistema que faltam no grupo */
+export const criarPadraoPesquisa = (grupoId: number, pesquisa: string) =>
+  chamar<{ criados: number }>('POST', `/api/grupos/${grupoId}/pesquisa-campos/padrao?pesquisa=${encodeURIComponent(pesquisa)}`);
+/** Voltar ao padrão: apaga todos os campos do grupo nessa pesquisa */
+export const padraoCamposPesquisa = (grupoId: number, pesquisa: string) =>
+  chamar<{ excluidos: number }>('DELETE', `/api/grupos/${grupoId}/pesquisa-campos?pesquisa=${encodeURIComponent(pesquisa)}`);
+
 // ---------- Preferências das listas e formulários (sys_usuarios.config_listas) ----------
 // Lidas uma vez por sessão e gravadas por chave. Se a leitura falhar, nada é gravado: um PUT só com uma chave
 // apagaria as demais.

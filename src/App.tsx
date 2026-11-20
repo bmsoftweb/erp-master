@@ -6,6 +6,7 @@ import { Painel } from './components/Painel';
 import { Grupos } from './components/Grupos';
 import { Empresas } from './components/Empresas';
 import { Perfis } from './components/Perfis';
+import { Desenvolvedor } from './components/Desenvolvedor';
 import { Usuarios } from './components/Usuarios';
 import { Modulos } from './components/Modulos';
 import { Configuracoes } from './components/Configuracoes';
@@ -45,10 +46,12 @@ export default function App() {
   const [aviso, setAviso] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState(() => (sessaoInicial ? telaInicial(sessaoInicial.usuario) : 'painel'));
   const [menuMobile, setMenuMobile] = useState(false);
-  // Grupo escolhido em Grupos > Empresas: a tela de empresas (sem item no menu) é sempre a de um grupo; navegar pelo menu fecha
+  // Grupo escolhido em Grupos > Empresas ou Configurações: telas sem item no menu, sempre de um grupo; navegar pelo menu fecha
   const [grupoEmpresas, setGrupoEmpresas] = useState<Grupo | null>(null);
+  const [grupoConfig, setGrupoConfig] = useState<Grupo | null>(null);
   const navegar = (tab: string) => {
     setGrupoEmpresas(null);
+    setGrupoConfig(null);
     setActiveTab(tab);
   };
 
@@ -166,11 +169,17 @@ export default function App() {
           <AbrirMenuMobile.Provider value={() => setMenuMobile(true)}>
             {tela === 'painel' && <Painel usuario={usuario} onNavegar={navegar} />}
             {tela === 'grupos' &&
-              (grupoEmpresas ? <Empresas usuario={usuario} grupo={grupoEmpresas} onVoltar={() => setGrupoEmpresas(null)} /> : <Grupos usuario={usuario} onEmpresas={setGrupoEmpresas} />)}
+              (grupoEmpresas ? (
+                <Empresas usuario={usuario} grupo={grupoEmpresas} onVoltar={() => setGrupoEmpresas(null)} />
+              ) : grupoConfig ? (
+                <Configuracoes usuario={usuario} grupo={grupoConfig} onVoltar={() => setGrupoConfig(null)} />
+              ) : (
+                <Grupos usuario={usuario} onEmpresas={setGrupoEmpresas} onConfiguracoes={setGrupoConfig} />
+              ))}
             {tela === 'usuarios' && <Usuarios usuario={usuario} />}
             {tela === 'perfis' && <Perfis />}
+            {tela === 'desenvolvedor' && <Desenvolvedor />}
             {tela === 'modulos' && <Modulos onAbrir={abrirModulo} />}
-            {tela === 'configuracoes' && <Configuracoes />}
           </AbrirMenuMobile.Provider>
         </div>
       </div>

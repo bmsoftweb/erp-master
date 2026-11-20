@@ -11,7 +11,12 @@ import { excluirCadastro, listar, salvarCadastro, type Cadastro } from '../servi
 const mensagem = (err: unknown) => (err instanceof Error ? err.message : 'Erro de conexão com o servidor.');
 
 interface Props<T extends { id: number }, F> {
-  cadastro: Cadastro;
+  /** Rota /api/<cadastro>; com `fonte`, só identifica a lista e o formulário nas preferências */
+  cadastro: Cadastro | string;
+  /** Dados de outra origem (ex.: campos da pesquisa de um grupo) */
+  fonte?: { listar: () => Promise<T[]>; salvar: (id: number | null, dados: F) => Promise<unknown>; excluir: (id: number) => Promise<unknown> };
+  /** Dentro de outra tela: sem o cabeçalho próprio (Tela) */
+  embutido?: boolean;
   titulo: string;
   subtitulo: string;
   /** Nome do registro, ex.: "Grupo" (rodapé do formulário e mensagens) */
@@ -46,7 +51,7 @@ interface Props<T extends { id: number }, F> {
  * Cadastro no padrão do bm-estoque: lista (ListaCrm) ocupando a tela e, ao incluir ou editar, o formulário
  * (FormCrm) no lugar dela, com Cancelar e Salvar fixos no pé.
  */
-export function CadastroCrm<T extends { id: number }, F extends object>({ cadastro, titulo, subtitulo, registro, feminino, colunas, novo, doRegistro, campos, validar, nomeDe, inativa, aoCarregar, acoesExtras, filtro, barraExtra, somenteLeitura }: Props<T, F>) {
+export function CadastroCrm<T extends { id: number }, F extends object>({ cadastro, fonte, embutido, titulo, subtitulo, registro, feminino, colunas, novo, doRegistro, campos, validar, nomeDe, inativa, aoCarregar, acoesExtras, filtro, barraExtra, somenteLeitura }: Props<T, F>) {
   const [linhas, setLinhas] = useState<T[]>([]);
   const [carregando, setCarregando] = useState(true);
   const [form, setForm] = useState<F | null>(null);
@@ -55,11 +60,16 @@ export function CadastroCrm<T extends { id: number }, F extends object>({ cadast
   const [excluindo, setExcluindo] = useState<T | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const dados = fonte ?? {
+    listar: () => listar<T>(cadastro as Cadastro),
+    salvar: (id: number | null, f: F) => salvarCadastro(cadastro as Cadastro, id, f),
+    excluir: (id: number) => excluirCadastro(cadastro as Cadastro, id),
+  };
 
   const carregar = useCallback(async () => {
     setCarregando(true);
     try {
-      const l = await listar<T>(cadastro);
+      const l = await dados.listar();
       setLinhas(l);
       aoCarregar?.(l);
     } catch (err) {
@@ -67,7 +77,7 @@ export function CadastroCrm<T extends { id: number }, F extends object>({ cadast
     } finally {
       setCarregando(false);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- aoCarregar muda a cada render da tela
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- aoCarregar e fonte mudam a cada render (outra fonte = outra key)
   }, [cadastro]);
 
   useEffect(() => {
@@ -85,7 +95,7 @@ export function CadastroCrm<T extends { id: number }, F extends object>({ cadast
     if (invalido) return setErro(invalido);
     setSalvando(true);
     try {
-      await salvarCadastro(cadastro, editando?.id ?? null, form);
+      await dados.salvar(editando?.id ?? null, form);
       setForm(null);
       setToast(editando ? `${registro} alterad${feminino ? 'a' : 'o'}.` : `${registro} incluíd${feminino ? 'a' : 'o'}.`);
       carregar();
@@ -99,7 +109,7 @@ export function CadastroCrm<T extends { id: number }, F extends object>({ cadast
   const excluir = async (r: T) => {
     setExcluindo(null);
     try {
-      await excluirCadastro(cadastro, r.id);
+      await dados.excluir(r.id);
       setToast(inativa ? `${registro} inativad${feminino ? 'a' : 'o'}.` : `${registro} excluíd${feminino ? 'a' : 'o'}.`);
       carregar();
     } catch (err) {
@@ -107,8 +117,8 @@ export function CadastroCrm<T extends { id: number }, F extends object>({ cadast
     }
   };
 
-  return (
-    <Tela titulo={titulo} subtitulo={subtitulo}>
+  const conteudo = (
+    <>
       {form ? (
         <FormCrm
           id={cadastro}
@@ -166,6 +176,11 @@ export function CadastroCrm<T extends { id: number }, F extends object>({ cadast
 
       {erro && <AvisoErro mensagem={erro} onFechar={() => setErro(null)} />}
       {toast && <Toast mensagem={toast} onFechar={() => setToast(null)} />}
+    </>
+  );
+  return embutido ? conteudo : (
+    <Tela titulo={titulo} subtitulo={subtitulo}>
+      {conteudo}
     </Tela>
   );
 }

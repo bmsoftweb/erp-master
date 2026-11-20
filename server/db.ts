@@ -17,6 +17,9 @@ export const pool = mysql.createPool({
   connectTimeout: 20000,
   enableKeepAlive: true,
   keepAliveInitialDelay: 10000,
+  // O MySQL derruba conexão parada (ECONNRESET): fecha as ociosas antes de serem reaproveitadas
+  maxIdle: 0,
+  idleTimeout: 20000,
   dateStrings: true,
 });
 

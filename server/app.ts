@@ -5,6 +5,8 @@ import crypto from 'crypto';
 import type { ResultSetHeader, RowDataPacket } from 'mysql2';
 import { pool } from './db.js';
 import { emitirToken, lerToken } from './sessao.js';
+import { carregarPfx } from './certificado.js';
+import { CATALOGOS, COLUNAS_BLOQUEADAS, FORMATOS, MODOS, aplicarModelo, catalogoDoGrupo, executarLeitura, modeloSql, validarSqlProprio } from './pesquisaCatalogo.js';
 import { cnpjValido, limparCnpj } from '../src/utils/cnpj.js';
 import { TIPOS_ATUACAO, UFS } from '../src/utils/listas.js';
 
@@ -329,6 +331,278 @@ export function createApp() {
     }),
   );
 
+  // ---------- Campos das pesquisas do erp-vendas por grupo (ven_pesquisa_campos): só o super ----------
+  // O suporte escolhe tabela e coluna em listas; o erp-vendas monta o SQL. Nada digitado vira SQL.
+  // Tabelas, campos do sistema e SQL vêm de pesquisaCatalogo.ts, cópia idêntica do arquivo do erp-vendas.
+  type TabelaPesquisa = { tabela: string; rotulo: string; alias: string; colunas?: string[] };
+  /** Tabelas liberadas por pesquisa (as que o catálogo já junta no FROM) */
+  const TABELAS_PESQUISA: Record<string, TabelaPesquisa[]> = Object.fromEntries(
+    Object.entries(CATALOGOS).map(([p, c]) => [p, Object.entries(c.tabelas).map(([tabela, t]) => ({ tabela, ...t }))]),
+  );
+  /**
+   * Campos do sistema (os `campos` do catálogo): "Criar Pesquisa" grava um por linha, sem tabela, para o suporte mudar
+   * nome, pesquisa e "no grid", ou desligar. `usa` = tabela.coluna que o campo mostra: escolhida no "Novo", grava a
+   * linha do campo do sistema (nunca um extra repetido); some da lista de colunas enquanto essa linha existir no grupo.
+   */
+  type CampoPadrao = { chave: string; label: string; formato?: string; busca?: string; visivel?: boolean; usa?: string };
+  const PADRAO_PESQUISA: Record<string, CampoPadrao[]> = Object.fromEntries(
+    Object.entries(CATALOGOS).map(([p, c]) => [p, Object.entries(c.campos).map(([chave, f]) => ({ chave, label: f.label, formato: f.formato, busca: f.busca, visivel: f.visivel, usa: f.usa }))]),
+  );
+  const FORMATOS_PESQUISA = FORMATOS;
+  const MODOS_PESQUISA = MODOS;
+
+  const tabelaPesquisa = (pesquisa: unknown, tabela: unknown): TabelaPesquisa => {
+    const t = TABELAS_PESQUISA[String(pesquisa)]?.find((x) => x.tabela === tabela);
+    if (!t) throw new ErroApi(400, 'Tabela não liberada para esta pesquisa.');
+    return t;
+  };
+  /** Campo do sistema que já mostra esta coluna */
+  const doSistema = (pesquisa: string, tabela: string, coluna: string) => PADRAO_PESQUISA[pesquisa]?.find((c) => c.usa === `${tabela}.${coluna}`);
+  /** Colunas liberadas; `existentes` = chaves de campos do sistema já gravados no grupo (essas colunas ficam de fora) */
+  const colunasPesquisa = async (pesquisa: string, t: TabelaPesquisa, existentes = new Set<string>()) => {
+    const [r] = await pool.query<Linha[]>(
+      'SELECT column_name AS coluna, data_type AS tipo FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = ? ORDER BY ordinal_position',
+      [t.tabela],
+    );
+    return r
+      .map((x) => {
+        const s = doSistema(pesquisa, t.tabela, String(x.coluna));
+        return { coluna: String(x.coluna), tipo: String(x.tipo), ...(s && { sistema: s.label, chave: s.chave, formato: s.formato ?? '', busca: s.busca ?? '' }) };
+      })
+      .filter((c) => !COLUNAS_BLOQUEADAS.test(c.coluna) && (!t.colunas || t.colunas.includes(c.coluna)) && !(c.chave && existentes.has(c.chave)));
+  };
+  const opcao = (v: unknown, lista: string[], rotulo: string) => {
+    const s = String(v ?? '');
+    if (s && !lista.includes(s)) throw new ErroApi(400, `${rotulo} inválido.`);
+    return s || null;
+  };
+  const lerCampoPesquisa = async (b: Record<string, unknown>) => {
+    const t = tabelaPesquisa(b.pesquisa, b.tabela);
+    const coluna = String(b.coluna ?? '');
+    const sistema = doSistema(String(b.pesquisa), t.tabela, coluna);
+    // Coluna de campo do sistema: grava a linha dele (sem tabela), nunca um campo extra repetido
+    if (sistema)
+      return {
+        pesquisa: String(b.pesquisa),
+        chave: sistema.chave,
+        tabela: null,
+        coluna: null,
+        label: texto(b.label, 'Nome na pesquisa', 60, true),
+        formato: sistema.formato ?? null,
+        busca: sistema.busca ? opcao(b.busca, MODOS_PESQUISA, 'Tipo de pesquisa') : null,
+        visivel: flag(b.visivel),
+        ativo: flag(b.ativo),
+      };
+    if (!(await colunasPesquisa(String(b.pesquisa), t)).some((c) => c.coluna === coluna)) throw new ErroApi(400, 'Escolha uma coluna desta tabela.');
+    return {
+      pesquisa: String(b.pesquisa),
+      chave: `${t.alias}_${coluna}`.slice(0, 40),
+      tabela: t.tabela,
+      coluna,
+      label: texto(b.label, 'Nome na pesquisa', 60, true),
+      formato: opcao(b.formato, FORMATOS_PESQUISA, 'Formato'),
+      busca: opcao(b.busca, MODOS_PESQUISA, 'Tipo de pesquisa'),
+      visivel: flag(b.visivel),
+      ativo: flag(b.ativo),
+    };
+  };
+  const grupoExiste = async (grupoId: number) => {
+    const [[g]] = await pool.query<Linha[]>('SELECT id FROM sys_grupos WHERE id = ?', [grupoId]);
+    if (!g) throw new ErroApi(404, 'Grupo não encontrado.');
+    return grupoId;
+  };
+
+  app.get(
+    '/api/pesquisa-campos/tabelas',
+    rota(async (_req, res) => {
+      exigirSuper(res);
+      return Object.fromEntries(Object.entries(TABELAS_PESQUISA).map(([p, l]) => [p, l.map(({ tabela, rotulo }) => ({ tabela, rotulo }))]));
+    }),
+  );
+  app.get(
+    '/api/pesquisa-campos/colunas',
+    rota(async (req, res) => {
+      exigirSuper(res);
+      const pesquisa = String(req.query.pesquisa);
+      const [r] = await pool.query<Linha[]>('SELECT chave FROM ven_pesquisa_campos WHERE grupo_id = ? AND pesquisa = ? AND tabela IS NULL', [Number(req.query.grupo), pesquisa]);
+      return colunasPesquisa(pesquisa, tabelaPesquisa(pesquisa, req.query.tabela), new Set(r.map((x) => String(x.chave))));
+    }),
+  );
+  app.get(
+    '/api/grupos/:id/pesquisa-campos',
+    rota(async (req, res) => {
+      exigirSuper(res);
+      const [r] = await pool.query<Linha[]>(
+        'SELECT id, pesquisa, chave, tabela, coluna, label, formato, busca, visivel, ativo FROM ven_pesquisa_campos WHERE grupo_id = ? AND pesquisa = ? ORDER BY tabela IS NOT NULL, id',
+        [id(req.params.id), String(req.query.pesquisa ?? '')],
+      );
+      // buscavel: campo do sistema que não pesquisa (ex.: imagem, estoque) não aceita tipo de pesquisa
+      return r.map((x) => ({ ...x, buscavel: !!x.tabela || !!PADRAO_PESQUISA[x.pesquisa]?.find((c) => c.chave === x.chave)?.busca }));
+    }),
+  );
+  app.post(
+    '/api/grupos/:id/pesquisa-campos',
+    rota(async (req, res) => {
+      exigirSuper(res);
+      const grupoId = await grupoExiste(id(req.params.id));
+      const c = await lerCampoPesquisa(req.body || {});
+      const [r] = await pool.query<ResultSetHeader>('INSERT INTO ven_pesquisa_campos SET ?, grupo_id = ?, criado_em = NOW(), usuario_id = ?', [c, grupoId, usuarioAtual(res).id]);
+      return { id: r.insertId };
+    }),
+  );
+  app.put(
+    '/api/grupos/:id/pesquisa-campos/:campo',
+    rota(async (req, res) => {
+      exigirSuper(res);
+      const [[atual]] = await pool.query<Linha[]>('SELECT pesquisa, chave, tabela FROM ven_pesquisa_campos WHERE id = ? AND grupo_id = ?', [id(req.params.campo), id(req.params.id)]);
+      if (!atual) throw new ErroApi(404, 'Campo não encontrado.');
+      const b = req.body || {};
+      // Campo do sistema: só nome, pesquisa (se ele pesquisa), "no grid" e ativo
+      const padrao = atual.tabela ? null : PADRAO_PESQUISA[atual.pesquisa]?.find((x) => x.chave === atual.chave);
+      const c = padrao
+        ? {
+            label: texto(b.label, 'Nome na pesquisa', 60, true),
+            busca: padrao.busca ? opcao(b.busca, MODOS_PESQUISA, 'Tipo de pesquisa') : null,
+            visivel: flag(b.visivel),
+            ativo: flag(b.ativo),
+          }
+        : await lerCampoPesquisa(b);
+      await pool.query('UPDATE ven_pesquisa_campos SET ?, atualizado_em = NOW(), usuario_id = ? WHERE id = ?', [c, usuarioAtual(res).id, id(req.params.campo)]);
+      return { id: id(req.params.campo) };
+    }),
+  );
+  app.delete(
+    '/api/grupos/:id/pesquisa-campos/:campo',
+    rota(async (req, res) => {
+      exigirSuper(res);
+      const [r] = await pool.query<ResultSetHeader>('DELETE FROM ven_pesquisa_campos WHERE id = ? AND grupo_id = ?', [id(req.params.campo), id(req.params.id)]);
+      if (!r.affectedRows) throw new ErroApi(404, 'Campo não encontrado.');
+    }),
+  );
+  // SQL da pesquisa: o padrão (gerado do catálogo + campos do grupo) e o próprio do grupo, que o suporte edita.
+  // O próprio fica em sys_grupos.config → pesquisas_sql.<pesquisa>; o erp-vendas usa ele no lugar do padrão.
+  const catalogoSql = async (grupoId: number, pesquisa: unknown) => {
+    const cat = await catalogoDoGrupo(pool, String(pesquisa ?? ''), grupoId);
+    if (!cat) throw new ErroApi(400, 'Pesquisa inválida.');
+    return cat;
+  };
+  /** O modelo com os marcadores trocados: uma filial do grupo (a primeira) e a busca de exemplo */
+  const sqlFinal = async (grupoId: number, pesquisa: string, sql: string, busca: string) => {
+    const erro = validarSqlProprio(sql);
+    if (erro) throw new ErroApi(400, erro);
+    const cat = await catalogoSql(grupoId, pesquisa);
+    const [[e]] = await pool.query<Linha[]>('SELECT id FROM sys_empresas WHERE grupo_id = ? ORDER BY id LIMIT 1', [grupoId]);
+    if (!e) throw new ErroApi(400, 'O grupo não tem empresa para testar o SQL.');
+    return { cat, empresa: Number(e.id), q: aplicarModelo(sql, cat, busca.slice(0, 100), [], { servico: '0' }, Number(e.id)) };
+  };
+  /** Roda o SQL (somente leitura) com uma filial do grupo e a busca de exemplo: linhas e colunas do grid que faltam */
+  const testarSql = async (grupoId: number, pesquisa: string, sql: string, busca: string) => {
+    const { cat, q } = await sqlFinal(grupoId, pesquisa, sql, busca);
+    let linhas: unknown[];
+    let campos: { name: string }[];
+    try {
+      [linhas, campos] = (await executarLeitura(pool, q.sql, q.params)) as any;
+    } catch (err: any) {
+      throw new ErroApi(400, `O SQL não rodou: ${err?.sqlMessage || err?.message || err}`);
+    }
+    const tem = new Set(campos.map((f) => f.name));
+    const faltam = ['id', ...Object.keys(cat.campos)].filter((k) => !tem.has(k)).map((k) => cat.campos[k]?.label ?? k);
+    return { linhas: linhas.length, faltam };
+  };
+  app.get(
+    '/api/grupos/:id/pesquisa-sql',
+    rota(async (req, res) => {
+      exigirSuper(res);
+      const grupoId = await grupoExiste(id(req.params.id));
+      const cat = await catalogoSql(grupoId, req.query.pesquisa);
+      const proprio = (await lerConfigGrupo(grupoId)).pesquisas_sql?.[String(req.query.pesquisa)];
+      return { padrao: modeloSql(cat), proprio: typeof proprio === 'string' ? proprio : null };
+    }),
+  );
+  // Raw: o SQL final, com os valores no lugar dos ? (só para ver e copiar; no erp-vendas eles vão como parâmetros)
+  app.post(
+    '/api/grupos/:id/pesquisa-sql/raw',
+    rota(async (req, res) => {
+      exigirSuper(res);
+      const b = req.body || {};
+      const { empresa, q } = await sqlFinal(await grupoExiste(id(req.params.id)), String(b.pesquisa ?? ''), String(b.sql ?? ''), String(b.busca ?? ''));
+      let i = 0;
+      const sql = q.sql.replace(/\?/g, () => {
+        const v = q.params[i++];
+        return typeof v === 'number' ? String(v) : `'${String(v).replace(/\\/g, '\\\\').replace(/'/g, "''")}'`;
+      });
+      return { sql, empresa };
+    }),
+  );
+  app.post(
+    '/api/grupos/:id/pesquisa-sql/testar',
+    rota(async (req, res) => {
+      exigirSuper(res);
+      const b = req.body || {};
+      return testarSql(await grupoExiste(id(req.params.id)), String(b.pesquisa ?? ''), String(b.sql ?? ''), String(b.busca ?? ''));
+    }),
+  );
+  app.put(
+    '/api/grupos/:id/pesquisa-sql',
+    rota(async (req, res) => {
+      exigirSuper(res);
+      const grupoId = await grupoExiste(id(req.params.id));
+      const b = req.body || {};
+      const pesquisa = String(b.pesquisa ?? '');
+      const sql = String(b.sql ?? '').trim();
+      // Só grava o que roda: um erro aqui pararia a pesquisa do grupo (o erp-vendas cairia no padrão)
+      const teste = await testarSql(grupoId, pesquisa, sql, 'teste');
+      if (teste.faltam.includes('id')) throw new ErroApi(400, 'O SQL precisa trazer a coluna id (a chave da linha).');
+      const config = await lerConfigGrupo(grupoId);
+      const json = JSON.stringify({ ...config, pesquisas_sql: { ...config.pesquisas_sql, [pesquisa]: sql } });
+      if (json.length > 60_000) throw new ErroApi(413, 'Configuração muito grande.');
+      await pool.query('UPDATE sys_grupos SET config = ? WHERE id = ?', [json, grupoId]);
+      return teste;
+    }),
+  );
+  // Voltar Padrão: tira o SQL próprio (o erp-vendas volta a gerar o SQL)
+  app.delete(
+    '/api/grupos/:id/pesquisa-sql',
+    rota(async (req, res) => {
+      exigirSuper(res);
+      const grupoId = await grupoExiste(id(req.params.id));
+      const config = await lerConfigGrupo(grupoId);
+      const { [String(req.query.pesquisa)]: _, ...resto } = config.pesquisas_sql ?? {};
+      const { pesquisas_sql: __, ...sem } = config;
+      await pool.query('UPDATE sys_grupos SET config = ? WHERE id = ?', [JSON.stringify(Object.keys(resto).length ? { ...sem, pesquisas_sql: resto } : sem), grupoId]);
+    }),
+  );
+  // Criar Pesquisa: grava os campos do sistema que faltam no grupo, para o suporte ajustar em vez de digitar um a um
+  app.post(
+    '/api/grupos/:id/pesquisa-campos/padrao',
+    rota(async (req, res) => {
+      exigirSuper(res);
+      const grupoId = await grupoExiste(id(req.params.id));
+      const pesquisa = String(req.query.pesquisa ?? '');
+      const campos = PADRAO_PESQUISA[pesquisa];
+      if (!campos) throw new ErroApi(400, 'Pesquisa inválida.');
+      const usuario = usuarioAtual(res).id;
+      // A chave única (grupo, pesquisa, chave) deixa de fora os que já existem
+      const [r] = await pool.query<ResultSetHeader>(
+        `INSERT IGNORE INTO ven_pesquisa_campos (grupo_id, pesquisa, chave, label, formato, busca, visivel, ativo, criado_em, usuario_id)
+         VALUES ${campos.map(() => '(?, ?, ?, ?, ?, ?, ?, 1, NOW(), ?)').join(', ')}`,
+        campos.flatMap((c) => [grupoId, pesquisa, c.chave, c.label, c.formato ?? null, c.busca ?? null, c.visivel ? 1 : 0, usuario]),
+      );
+      return { criados: r.affectedRows };
+    }),
+  );
+  // Voltar ao padrão: apaga os campos do grupo numa pesquisa (o erp-vendas volta a usar só os do sistema, como vêm)
+  app.delete(
+    '/api/grupos/:id/pesquisa-campos',
+    rota(async (req, res) => {
+      exigirSuper(res);
+      const pesquisa = String(req.query.pesquisa ?? '');
+      if (!(pesquisa in TABELAS_PESQUISA)) throw new ErroApi(400, 'Pesquisa inválida.');
+      const [r] = await pool.query<ResultSetHeader>('DELETE FROM ven_pesquisa_campos WHERE grupo_id = ? AND pesquisa = ?', [id(req.params.id), pesquisa]);
+      return { excluidos: r.affectedRows };
+    }),
+  );
+
   // ---------- Empresas (admin: só vê as do grupo dele) ----------
   app.get(
     '/api/empresas',
@@ -374,6 +648,98 @@ export function createApp() {
     };
   });
   inativar('empresas', 'sys_empresas');
+
+  // ---------- Certificados digitais A1 da empresa (super: qualquer empresa; admin: só as do grupo dele) ----------
+  // Um por empresa em sys_empresas_certificados, lido pelo erp-nfe e pelo erp-nfs (senha em texto, como eles esperam;
+  // só o Master grava). Nenhuma rota devolve o arquivo nem a senha. server/certificado.ts é cópia idêntica do erp-nfe.
+  const empresaPermitida = async (res: Response, empresaId: number) => {
+    const [[e]] = await pool.query<Linha[]>('SELECT grupo_id FROM sys_empresas WHERE id = ?', [empresaId]);
+    if (!e) throw new ErroApi(404, 'Empresa não encontrada.');
+    grupoPermitido(res, Number(e.grupo_id));
+    return empresaId;
+  };
+  /** Data do certificado no horário de Brasília, como o MySQL grava ("aaaa-mm-dd hh:mm:ss") */
+  const dataBrasilia = (d: Date) => d.toLocaleString('sv-SE', { timeZone: 'America/Sao_Paulo' });
+
+  app.get(
+    '/api/empresas/:id/certificado',
+    rota(async (req, res) => {
+      const empresaId = await empresaPermitida(res, id(req.params.id));
+      const [linhas] = await pool.query<Linha[]>(
+        `SELECT nome_arquivo, cnpj, razao_social, numero_serie, emissor, valido_de, valido_ate, DATEDIFF(valido_ate, NOW()) AS dias, atualizado_em
+           FROM sys_empresas_certificados WHERE empresa_id = ?`,
+        [empresaId],
+      );
+      return { certificado: linhas[0] ?? null };
+    }),
+  );
+  app.put(
+    '/api/empresas/:id/certificado',
+    rota(async (req, res) => {
+      const empresaId = await empresaPermitida(res, id(req.params.id));
+      const b = req.body || {};
+      const senha = typeof b.senha === 'string' ? b.senha : '';
+      if (!senha) throw new ErroApi(400, 'Informe a senha do certificado.');
+      const pfx = Buffer.from(String(b.arquivo || ''), 'base64');
+      if (!pfx.length) throw new ErroApi(400, 'Escolha o arquivo do certificado (.pfx ou .p12).');
+      if (pfx.length > 200_000) throw new ErroApi(400, 'Arquivo grande demais para um certificado A1.');
+      const nome = texto(b.nome, 'Nome do arquivo', 160) || 'certificado.pfx';
+      let info;
+      try {
+        info = carregarPfx(pfx, senha).info; // senha errada ou arquivo inválido não chegam ao banco
+      } catch (err) {
+        throw new ErroApi(400, (err as Error).message);
+      }
+      await pool.query(
+        `INSERT INTO sys_empresas_certificados (empresa_id, nome_arquivo, arquivo, senha, cnpj, razao_social, numero_serie, emissor, valido_de, valido_ate)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON DUPLICATE KEY UPDATE nome_arquivo = VALUES(nome_arquivo), arquivo = VALUES(arquivo), senha = VALUES(senha), cnpj = VALUES(cnpj),
+           razao_social = VALUES(razao_social), numero_serie = VALUES(numero_serie), emissor = VALUES(emissor),
+           valido_de = VALUES(valido_de), valido_ate = VALUES(valido_ate)`,
+        [empresaId, nome, pfx, senha, info.cnpj || null, info.razaoSocial.slice(0, 160) || null, info.numeroSerie.slice(0, 80) || null, info.emissor.slice(0, 255) || null, dataBrasilia(info.validoDe), dataBrasilia(info.validoAte)],
+      );
+    }),
+  );
+  app.delete(
+    '/api/empresas/:id/certificado',
+    rota(async (req, res) => {
+      const empresaId = await empresaPermitida(res, id(req.params.id));
+      const [r] = await pool.query<ResultSetHeader>('DELETE FROM sys_empresas_certificados WHERE empresa_id = ?', [empresaId]);
+      if (!r.affectedRows) throw new ErroApi(404, 'Certificado não encontrado.');
+    }),
+  );
+
+  // ---------- Desenvolvedor do PAF-NFC-e (sys_paf, uma linha para todo o ERP; lida pelo erp-pdv): só o super ----------
+  const CAMPOS_PAF = 'desenvolvedor_razao, desenvolvedor_cnpj, desenvolvedor_ie, desenvolvedor_im, desenvolvedor_endereco, desenvolvedor_telefone, desenvolvedor_responsavel, arq_bd, arq_sist, atualizado_em';
+  app.get(
+    '/api/desenvolvedor',
+    rota(async (_req, res) => {
+      exigirSuper(res);
+      const [[p]] = await pool.query<Linha[]>(`SELECT ${CAMPOS_PAF} FROM sys_paf WHERE id = 1`);
+      return { desenvolvedor: p ?? null };
+    }),
+  );
+  app.put(
+    '/api/desenvolvedor',
+    rota(async (req, res) => {
+      exigirSuper(res);
+      const b = req.body || {};
+      const cnpj = limparCnpj(String(b.desenvolvedor_cnpj ?? ''));
+      if (!cnpjValido(cnpj)) throw new ErroApi(400, 'CNPJ inválido: confira os dígitos.');
+      const p = {
+        desenvolvedor_razao: texto(b.desenvolvedor_razao, 'Razão social', 50, true),
+        desenvolvedor_cnpj: cnpj,
+        desenvolvedor_ie: digitos(b.desenvolvedor_ie, 14),
+        desenvolvedor_im: digitos(b.desenvolvedor_im, 14),
+        desenvolvedor_endereco: texto(b.desenvolvedor_endereco, 'Endereço', 150),
+        desenvolvedor_telefone: digitos(b.desenvolvedor_telefone, 20),
+        desenvolvedor_responsavel: texto(b.desenvolvedor_responsavel, 'Responsável técnico', 60),
+        arq_bd: texto(b.arq_bd, 'Arquitetura do banco', 120, true),
+        arq_sist: texto(b.arq_sist, 'Arquitetura do sistema', 120, true),
+      };
+      await pool.query('INSERT INTO sys_paf SET ?, id = 1, criado_em = NOW() ON DUPLICATE KEY UPDATE ?, atualizado_em = NOW()', [p, p]);
+    }),
+  );
 
   // ---------- Perfis (sem grupo: valem para todos; o admin só lê, para escolher no usuário) ----------
   app.get(

@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Settings } from 'lucide-react';
 import { CadastroCrm } from './CadastroCrm';
+import { ConfiguracoesEmpresa } from './ConfiguracoesEmpresa';
+import { BotaoAcao } from './MenuAcoes';
 import { Campo, INPUT_CLASS } from './FormCrm';
 import { Toggle } from './Toggle';
 import { AvisoErro } from './AvisoErro';
@@ -19,6 +21,8 @@ const TEXTOS = ['nome_fantasia', 'inscricao_estadual', 'inscricao_municipal', 'c
 export const Empresas: React.FC<{ usuario: Usuario; grupo: Grupo; onVoltar: () => void }> = ({ usuario, grupo, onVoltar }) => {
   const [grupos, setGrupos] = useState<Grupo[]>([]);
   const [erro, setErro] = useState<string | null>(null);
+  // Configurações de uma empresa (certificados etc.): abrem no lugar da lista
+  const [configurando, setConfigurando] = useState<Empresa | null>(null);
   useEffect(() => {
     listar<Grupo>('grupos')
       .then(setGrupos)
@@ -28,6 +32,8 @@ export const Empresas: React.FC<{ usuario: Usuario; grupo: Grupo; onVoltar: () =
   const texto = (f: Form, alterar: (p: Partial<Form>) => void, k: (typeof TEXTOS)[number], max: number, extra: React.InputHTMLAttributes<HTMLInputElement> = {}) => (
     <input maxLength={max} value={f[k] ?? ''} onChange={(e) => alterar({ [k]: e.target.value })} className={INPUT_CLASS} {...extra} />
   );
+
+  if (configurando) return <ConfiguracoesEmpresa empresa={configurando} onVoltar={() => setConfigurando(null)} />;
 
   return (
     <>
@@ -48,6 +54,7 @@ export const Empresas: React.FC<{ usuario: Usuario; grupo: Grupo; onVoltar: () =
         </button>
       }
       nomeDe={(e) => e.nome_fantasia || e.razao_social}
+      acoesExtras={(e) => <BotaoAcao icone={Settings} titulo="Configurações" descricao="Certificados e outras configurações desta empresa" onClick={() => setConfigurando(e)} />}
       colunas={[
         { key: 'id', label: 'ID', alinhar: 'numero', largura: 70 },
         { key: 'razao_social', label: 'Razão social', largura: 260 },

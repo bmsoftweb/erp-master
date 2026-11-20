@@ -1,5 +1,5 @@
 import React from 'react';
-import { Building2 } from 'lucide-react';
+import { Building2, Settings } from 'lucide-react';
 import { CadastroCrm } from './CadastroCrm';
 import { Campo, INPUT_CLASS } from './FormCrm';
 import { BotaoAcao } from './MenuAcoes';
@@ -14,8 +14,8 @@ interface Form {
 }
 
 /** Grupos de empresas (sys_grupos) */
-/** O admin só vê o próprio grupo (sem incluir, editar nem excluir) */
-export const Grupos: React.FC<{ usuario: Usuario; onEmpresas: (g: Grupo) => void }> = ({ usuario, onEmpresas }) => (
+/** O admin só vê o próprio grupo (sem incluir, editar nem excluir). Empresas e Configurações abrem no lugar da lista */
+export const Grupos: React.FC<{ usuario: Usuario; onEmpresas: (g: Grupo) => void; onConfiguracoes: (g: Grupo) => void }> = ({ usuario, onEmpresas, onConfiguracoes }) => (
   <CadastroCrm<Grupo, Form>
     cadastro="grupos"
     titulo="Grupos"
@@ -24,7 +24,12 @@ export const Grupos: React.FC<{ usuario: Usuario; onEmpresas: (g: Grupo) => void
     inativa
     somenteLeitura={!ehSuper(usuario)}
     nomeDe={(g) => g.nome}
-    acoesExtras={(g) => <BotaoAcao icone={Building2} titulo="Empresas" descricao="Abre as empresas deste grupo" onClick={() => onEmpresas(g)} />}
+    acoesExtras={(g) => (
+      <>
+        <BotaoAcao icone={Building2} titulo="Empresas" descricao="Abre as empresas deste grupo" onClick={() => onEmpresas(g)} />
+        <BotaoAcao icone={Settings} titulo="Configurações" descricao="Configurações dos módulos para este grupo" onClick={() => onConfiguracoes(g)} />
+      </>
+    )}
     colunas={[
       { key: 'id', label: 'ID', alinhar: 'numero', largura: 70 },
       { key: 'nome', label: 'Nome', largura: 320 },
