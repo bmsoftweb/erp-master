@@ -69,13 +69,13 @@ const digitos = (v: unknown, max: number) => String(v ?? '').replace(/\D/g, '').
  */
 const usuarioErp = (u: Linha): UsuarioSessao => ({
   id: Number(u.id),
-  nome: String(u.login),
+  nome: String(u.nome || u.login),
   email: String(u.login),
   role: NIVEIS.includes(u.nivel as Nivel) ? (u.nivel as Nivel) : 'user',
   perfil_id: 0,
   grupo_id: Number(u.grupo_id),
 });
-const COLUNAS_SESSAO = 'id, login, nivel, grupo_id';
+const COLUNAS_SESSAO = 'id, login, nome, nivel, grupo_id';
 
 const ehBcrypt = (hash: string) => /^\$2[aby]\$/.test(hash);
 
@@ -119,6 +119,8 @@ async function modulosDoUsuario(): Promise<Linha[]> {
 /** App Express com todas as rotas /api. Local: server.ts adiciona o Vite e o listen; Vercel: api/index.ts */
 export function createApp() {
   const app = express();
+  // Imagens do PDV vêm em base64 (o Master já reduz; a folga é para PNG grande)
+  app.use('/api/empresas/:id/imagens', express.json({ limit: '4mb' }));
   app.use(express.json({ limit: '1mb' }));
 
   // ==========================================================
@@ -709,6 +711,178 @@ export function createApp() {
     }),
   );
 
+  // ---------- Caixas do PDV da empresa (pdv_caixas; SQL em erp-pdv/code/extras/2026-11-20_pdv_caixas.sql) ----------
+  // O token é digitado uma vez no computador do caixa (login do erp-pdv → "Registrar"): daí em diante ele só entra
+  // nesta empresa e, com usuário escolhido, só com esse usuário (que também só entra por ele). Excluir inativa.
+  /** Token NNNN-NNNN, mesmo formato do erp-pdv (server/caixas.ts) */
+  const novoTokenCaixa = () => {
+    const s = String(crypto.randomInt(0, 100_000_000)).padStart(8, '0');
+    return `${s.slice(0, 4)}-${s.slice(4)}`;
+  };
+  /** Quem entra na empresa pelo PDV: liberados em sys_usuarios_empresas, ou a empresa principal de quem não tem liberação */
+  const SQL_USUARIOS_EMPRESA = `
+    SELECT u.id, u.login FROM sys_usuarios u
+     WHERE u.ativo = 1 AND (u.id IN (SELECT ue.usuario_id FROM sys_usuarios_empresas ue WHERE ue.empresa_id = ?)
+        OR (u.empresa_id = ? AND NOT EXISTS (SELECT 1 FROM sys_usuarios_empresas x WHERE x.usuario_id = u.id)))
+     ORDER BY u.login`;
+  const caixasDa = async (req: Request, res: Response) => {
+    exigirAdmin(res);
+    return empresaPermitida(res, id(req.params.id));
+  };
+
+  app.get(
+    '/api/empresas/:id/caixas',
+    rota(async (req, res) => {
+      const empresaId = await caixasDa(req, res);
+      return (
+        await pool.query<Linha[]>(
+          `SELECT c.id, c.numero, c.descricao, c.usuario_id, u.login, c.token, c.ativo, c.sitef_ip, c.sitef_loja, c.sitef_terminal, c.teclado_virtual,
+                  c.balanca, c.balanca_velocidade, c.balanca_formato,
+                  DATE_FORMAT(c.registrado_em, '%Y-%m-%d %H:%i') AS registrado_em, DATE_FORMAT(c.ultimo_acesso, '%Y-%m-%d %H:%i') AS ultimo_acesso,
+                  ul.login AS ultimo_login, c.ultimo_ip
+             FROM pdv_caixas c
+             LEFT JOIN sys_usuarios u ON u.id = c.usuario_id
+             LEFT JOIN sys_usuarios ul ON ul.id = c.ultimo_usuario_id
+            WHERE c.empresa_id = ? ORDER BY c.numero`,
+          [empresaId],
+        )
+      )[0];
+    }),
+  );
+  app.get(
+    '/api/empresas/:id/caixas/usuarios',
+    rota(async (req, res) => {
+      const empresaId = await caixasDa(req, res);
+      return (await pool.query<Linha[]>(SQL_USUARIOS_EMPRESA, [empresaId, empresaId]))[0];
+    }),
+  );
+  const gravarCaixa = async (req: Request, res: Response, caixaId: number | null) => {
+    const empresaId = await caixasDa(req, res);
+    const b = req.body || {};
+    const descricao = texto(b.descricao, 'Descrição', 60, true);
+    const usuario = b.usuario_id == null || b.usuario_id === '' ? null : id(b.usuario_id, 'Usuário');
+    if (usuario !== null) {
+      const [us] = await pool.query<Linha[]>(SQL_USUARIOS_EMPRESA, [empresaId, empresaId]);
+      if (!us.some((u) => Number(u.id) === usuario)) throw new ErroApi(400, 'Usuário não liberado nesta empresa.');
+    }
+    // TEF SiTEF do caixa (lido pelo erp-pdv): os três preenchidos ou nenhum; vazio, o cartão é lançado à mão
+    const sitef = [opcional(b.sitef_ip, 'Servidor SiTEF', 100), opcional(b.sitef_loja, 'Loja SiTEF', 8), opcional(b.sitef_terminal, 'Terminal SiTEF', 8)];
+    if (sitef.some(Boolean) && !sitef.every(Boolean)) throw new ErroApi(400, 'TEF SiTEF: preencha servidor, loja e terminal (ou deixe os três vazios).');
+    // Balança de checkout (lida pelo navegador do caixa na porta serial): velocidade e formato do manual da balança
+    const velocidade = Number(b.balanca_velocidade) || 2400;
+    const formato = String(b.balanca_formato || '8N1').toUpperCase();
+    if (![1200, 2400, 4800, 9600, 19200, 38400, 57600, 115200].includes(velocidade)) throw new ErroApi(400, 'Balança: velocidade inválida.');
+    if (!/^[78][NEO][12]$/.test(formato)) throw new ErroApi(400, 'Balança: formato inválido (ex.: 8N1, 7E1).');
+    const balanca = [flag(b.balanca), velocidade, formato];
+    if (caixaId !== null) {
+      // Token novo desliga o computador registrado com o anterior e fica livre para um registro (o token vale para um
+      // computador só: o erp-pdv consome no registro, marcando registrado_em)
+      const token = b.novo_token ? novoTokenCaixa() : null;
+      const [r] = await pool.query<ResultSetHeader>(
+        `UPDATE pdv_caixas SET descricao = ?, usuario_id = ?, ativo = ?, token = COALESCE(?, token),
+                registrado_em = IF(? IS NULL, registrado_em, NULL), sitef_ip = ?, sitef_loja = ?, sitef_terminal = ?,
+                teclado_virtual = ?, balanca = ?, balanca_velocidade = ?, balanca_formato = ?, atualizado_em = NOW() WHERE id = ? AND empresa_id = ?`,
+        [descricao, usuario, flag(b.ativo), token, token, ...sitef, flag(b.teclado_virtual), ...balanca, caixaId, empresaId],
+      );
+      if (!r.affectedRows) throw new ErroApi(404, 'Caixa não encontrado.');
+      return { id: caixaId };
+    }
+    // Número sequencial na empresa; o índice único (empresa_id, numero) segura duas inclusões ao mesmo tempo
+    const [[m]] = await pool.query<Linha[]>('SELECT MAX(numero) AS ultimo FROM pdv_caixas WHERE empresa_id = ?', [empresaId]);
+    const [r] = await pool.query<ResultSetHeader>(
+      'INSERT INTO pdv_caixas (empresa_id, numero, descricao, usuario_id, token, sitef_ip, sitef_loja, sitef_terminal, teclado_virtual, balanca, balanca_velocidade, balanca_formato, ativo, criado_em) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, NOW())',
+      [empresaId, (Number(m?.ultimo) || 0) + 1, descricao, usuario, novoTokenCaixa(), ...sitef, flag(b.teclado_virtual), ...balanca],
+    );
+    return { id: r.insertId };
+  };
+  app.post('/api/empresas/:id/caixas', rota((req, res) => gravarCaixa(req, res, null)));
+  app.put('/api/empresas/:id/caixas/:caixa', rota((req, res) => gravarCaixa(req, res, id(req.params.caixa))));
+  app.delete(
+    '/api/empresas/:id/caixas/:caixa',
+    rota(async (req, res) => {
+      const empresaId = await caixasDa(req, res);
+      const [r] = await pool.query<ResultSetHeader>('UPDATE pdv_caixas SET ativo = 0, atualizado_em = NOW() WHERE id = ? AND empresa_id = ?', [id(req.params.caixa), empresaId]);
+      if (!r.affectedRows) throw new ErroApi(404, 'Caixa não encontrado.');
+    }),
+  );
+
+  // ---------- Imagens do PDV da empresa (pdv_imagens; SQL em erp-pdv/code/extras/2026-11-20_pdv_imagens.sql) ----------
+  // Vitrines do erp-pdv (tela = caixa: tela de venda; cliente: tela do cliente, vertical; SQL 2026-11-21_pdv_imagens_tela.sql):
+  // as ativas dentro do período se revezam. A imagem chega em base64 (o Master
+  // reduz para WebP antes de enviar) e só sai pela rota da própria imagem, nunca na lista.
+  const TIPOS_IMAGEM = ['image/webp', 'image/jpeg', 'image/png'];
+  const dataOpcional = (v: unknown, rotulo: string) => {
+    const t = String(v ?? '').trim();
+    if (!t) return null;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(t)) throw new ErroApi(400, `${rotulo} inválida.`);
+    return t;
+  };
+  app.get(
+    '/api/empresas/:id/imagens',
+    rota(async (req, res) => {
+      const empresaId = await caixasDa(req, res);
+      return (
+        await pool.query<Linha[]>(
+          `SELECT id, titulo, tipo, LENGTH(imagem) AS tamanho, DATE_FORMAT(data_inicio, '%Y-%m-%d') AS data_inicio,
+                  DATE_FORMAT(data_fim, '%Y-%m-%d') AS data_fim, ordem, ativo
+             FROM pdv_imagens WHERE empresa_id = ? AND tela = ? ORDER BY ordem, id`,
+          [empresaId, req.query.tela === 'cliente' ? 'cliente' : 'caixa'],
+        )
+      )[0];
+    }),
+  );
+  app.get(
+    '/api/empresas/:id/imagens/:img',
+    rota(async (req, res) => {
+      const empresaId = await caixasDa(req, res);
+      const [[i]] = await pool.query<Linha[]>('SELECT imagem, tipo FROM pdv_imagens WHERE id = ? AND empresa_id = ?', [id(req.params.img), empresaId]);
+      if (!i) throw new ErroApi(404, 'Imagem não encontrada.');
+      return { imagem: Buffer.from(i.imagem).toString('base64'), tipo: i.tipo };
+    }),
+  );
+  const gravarImagem = async (req: Request, res: Response, imagemId: number | null) => {
+    const empresaId = await caixasDa(req, res);
+    const b = req.body || {};
+    const titulo = opcional(b.titulo, 'Texto', 100);
+    const [inicio, fim] = [dataOpcional(b.data_inicio, 'Data de início'), dataOpcional(b.data_fim, 'Data de fim')];
+    if (inicio && fim && fim < inicio) throw new ErroApi(400, 'A data de fim é anterior à de início.');
+    const ordem = Number.isInteger(Number(b.ordem)) ? Number(b.ordem) : 0;
+    const tela = b.tela === 'cliente' ? 'cliente' : 'caixa';
+    // Na edição a imagem é opcional: sem ela, mantém a gravada
+    let imagem: Buffer | null = null;
+    if (b.imagem) {
+      if (!TIPOS_IMAGEM.includes(b.tipo)) throw new ErroApi(400, 'Imagem em formato não aceito (use JPG, PNG ou WebP).');
+      imagem = Buffer.from(String(b.imagem), 'base64');
+      if (imagem.length > 3 * 1024 * 1024) throw new ErroApi(400, 'Imagem grande demais (máximo 3 MB).');
+    } else if (imagemId === null) throw new ErroApi(400, 'Escolha a imagem.');
+    if (imagemId !== null) {
+      const [r] = await pool.query<ResultSetHeader>(
+        `UPDATE pdv_imagens SET titulo = ?, data_inicio = ?, data_fim = ?, ordem = ?, ativo = ?,
+                imagem = COALESCE(?, imagem), tipo = IF(? IS NULL, tipo, ?), atualizado_em = NOW() WHERE id = ? AND empresa_id = ?`,
+        [titulo, inicio, fim, ordem, flag(b.ativo), imagem, imagem, b.tipo ?? null, imagemId, empresaId],
+      );
+      if (!r.affectedRows) throw new ErroApi(404, 'Imagem não encontrada.');
+      return { id: imagemId };
+    }
+    const [r] = await pool.query<ResultSetHeader>(
+      `INSERT INTO pdv_imagens (empresa_id, tela, titulo, imagem, tipo, data_inicio, data_fim, ordem, ativo, criado_em, atualizado_em)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())`,
+      [empresaId, tela, titulo, imagem, b.tipo, inicio, fim, ordem, b.ativo === undefined ? 1 : flag(b.ativo)],
+    );
+    return { id: r.insertId };
+  };
+  app.post('/api/empresas/:id/imagens', rota((req, res) => gravarImagem(req, res, null)));
+  app.put('/api/empresas/:id/imagens/:img', rota((req, res) => gravarImagem(req, res, id(req.params.img))));
+  // Imagem não tem movimentação: excluir apaga
+  app.delete(
+    '/api/empresas/:id/imagens/:img',
+    rota(async (req, res) => {
+      const empresaId = await caixasDa(req, res);
+      const [r] = await pool.query<ResultSetHeader>('DELETE FROM pdv_imagens WHERE id = ? AND empresa_id = ?', [id(req.params.img), empresaId]);
+      if (!r.affectedRows) throw new ErroApi(404, 'Imagem não encontrada.');
+    }),
+  );
+
   // ---------- Desenvolvedor do PAF-NFC-e (sys_paf, uma linha para todo o ERP; lida pelo erp-pdv): só o super ----------
   const CAMPOS_PAF = 'desenvolvedor_razao, desenvolvedor_cnpj, desenvolvedor_ie, desenvolvedor_im, desenvolvedor_endereco, desenvolvedor_telefone, desenvolvedor_responsavel, arq_bd, arq_sist, atualizado_em';
   app.get(
@@ -769,7 +943,7 @@ export function createApp() {
     rota(async (_req, res) => {
       const f = usuariosAlteraveis(res, 'u.');
       const [rows] = await pool.query<Linha[]>(
-        `SELECT u.id, u.login, u.grupo_id, g.nome AS grupo_nome, u.empresa_id, COALESCE(NULLIF(e.nome_fantasia, ''), e.razao_social) AS empresa_nome,
+        `SELECT u.id, u.login, u.nome, u.grupo_id, g.nome AS grupo_nome, u.empresa_id, COALESCE(NULLIF(e.nome_fantasia, ''), e.razao_social) AS empresa_nome,
                 u.perfil_id, p.nome AS perfil_nome, u.nivel, u.ativo, DATE_FORMAT(u.ultimo_acesso, '%Y-%m-%d %H:%i') AS ultimo_acesso,
                 (SELECT GROUP_CONCAT(ue.empresa_id) FROM sys_usuarios_empresas ue WHERE ue.usuario_id = u.id) AS empresas
            FROM sys_usuarios u LEFT JOIN sys_grupos g ON g.id = u.grupo_id LEFT JOIN sys_empresas e ON e.id = u.empresa_id
@@ -792,6 +966,7 @@ export function createApp() {
     if (!NIVEIS.includes(nivel)) throw new ErroApi(400, 'Informe o nível do usuário.');
     if (nivel === 'super' && eu.role !== 'super') throw new ErroApi(403, 'Só o usuário super pode criar outro super.');
     const dados: Record<string, unknown> = {
+      nome: texto(b.nome, 'Nome', 150, true),
       login: texto(b.login, 'Login', 60, true),
       grupo_id: grupoPermitido(res, id(b.grupo_id, 'Grupo')),
       empresa_id: id(b.empresa_id, 'Empresa principal'),

@@ -70,6 +70,65 @@ export const gravarCertificado = (empresaId: number, dados: { arquivo: string; n
   chamar<void>('PUT', `/api/empresas/${empresaId}/certificado`, dados);
 export const removerCertificado = (empresaId: number) => chamar<void>('DELETE', `/api/empresas/${empresaId}/certificado`);
 
+// ---------- Caixas do PDV da empresa (pdv_caixas: o erp-pdv confere o token no login) ----------
+/** Datas "aaaa-mm-dd hh:mm" */
+export interface CaixaPdv {
+  id: number;
+  numero: number;
+  descricao: string;
+  usuario_id: number | null;
+  login: string | null;
+  /** NNNN-NNNN, digitado no computador do caixa */
+  token: string;
+  ativo: number;
+  registrado_em: string | null;
+  ultimo_acesso: string | null;
+  ultimo_login: string | null;
+  ultimo_ip: string;
+  /** TEF SiTEF (Agente CliSiTef no computador do caixa): os três ou nenhum */
+  sitef_ip: string | null;
+  sitef_loja: string | null;
+  sitef_terminal: string | null;
+  /** Tela touch: o erp-pdv deste computador mostra o teclado virtual */
+  teclado_virtual: number;
+  /** Balança de checkout na porta serial do computador do caixa */
+  balanca: number;
+  balanca_velocidade: number;
+  balanca_formato: string;
+}
+export const listarCaixas = (empresaId: number) => get<CaixaPdv[]>(`/api/empresas/${empresaId}/caixas`);
+export const usuariosDosCaixas = (empresaId: number) => get<{ id: number; login: string }[]>(`/api/empresas/${empresaId}/caixas/usuarios`);
+/** novo_token: troca o token (desliga o computador registrado com o anterior) */
+export const salvarCaixa = (empresaId: number, caixaId: number | null, dados: { descricao: string; usuario_id: number | null; ativo?: boolean; novo_token?: boolean; sitef_ip: string; sitef_loja: string; sitef_terminal: string; teclado_virtual: boolean; balanca: boolean; balanca_velocidade: number; balanca_formato: string }) =>
+  chamar<{ id: number }>(caixaId !== null ? 'PUT' : 'POST', caixaId !== null ? `/api/empresas/${empresaId}/caixas/${caixaId}` : `/api/empresas/${empresaId}/caixas`, dados);
+/** Exclusão lógica: o computador do caixa deixa de entrar no PDV */
+export const inativarCaixa = (empresaId: number, caixaId: number) => chamar<void>('DELETE', `/api/empresas/${empresaId}/caixas/${caixaId}`);
+
+// ---------- Imagens do PDV da empresa (pdv_imagens: vitrine da tela de venda do erp-pdv) ----------
+/** Datas "aaaa-mm-dd"; a imagem só vem por lerImagemPdv */
+export interface ImagemPdv {
+  id: number;
+  titulo: string | null;
+  tipo: string;
+  /** Bytes da imagem gravada */
+  tamanho: number;
+  data_inicio: string | null;
+  data_fim: string | null;
+  ordem: number;
+  ativo: number;
+}
+/** tela: caixa = vitrine da tela de venda (3:2); cliente = coluna da tela do cliente (vertical 2:3) */
+export type TelaImagem = 'caixa' | 'cliente';
+export const listarImagensPdv = (empresaId: number, tela: TelaImagem) => get<ImagemPdv[]>(`/api/empresas/${empresaId}/imagens?tela=${tela}`);
+export const lerImagemPdv = (empresaId: number, imagemId: number) => get<{ imagem: string; tipo: string }>(`/api/empresas/${empresaId}/imagens/${imagemId}`);
+/** imagem em base64 (sem o "data:"); na edição, sem imagem mantém a gravada */
+export const salvarImagemPdv = (
+  empresaId: number,
+  imagemId: number | null,
+  dados: { tela: TelaImagem; titulo: string; data_inicio: string; data_fim: string; ordem: number; ativo: boolean; imagem?: string; tipo?: string },
+) => chamar<{ id: number }>(imagemId !== null ? 'PUT' : 'POST', imagemId !== null ? `/api/empresas/${empresaId}/imagens/${imagemId}` : `/api/empresas/${empresaId}/imagens`, dados);
+export const excluirImagemPdv = (empresaId: number, imagemId: number) => chamar<void>('DELETE', `/api/empresas/${empresaId}/imagens/${imagemId}`);
+
 // ---------- Desenvolvedor do PAF-NFC-e (sys_paf, uma linha para todo o ERP; só o super) ----------
 export interface Desenvolvedor {
   desenvolvedor_razao: string;

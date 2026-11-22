@@ -2,6 +2,10 @@
 
 Mais recente primeiro. PATCH a cada envio ao GitHub; MAJOR/MINOR só quando pedido.
 
+## 0.1.5 — 2026-11-21
+
+- Configurações da empresa ganham abas: Caixas (PDV), com token de registro de cada computador, teclado virtual, TEF SiTEF e balança (velocidade e formato) por caixa; Imagens do caixa e Imagens da tela do cliente, vitrines do erp-pdv.
+
 ## 0.1.4 — 2026-11-20
 
 - Configurações do grupo saem do menu e abrem pela ação "Configurações" da lista de Grupos.

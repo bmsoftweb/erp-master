@@ -55,6 +55,7 @@ export interface Perfil {
 export interface UsuarioLista {
   id: number;
   login: string;
+  nome: string | null;
   grupo_id: number;
   grupo_nome: string | null;
   empresa_id: number;

@@ -35,6 +35,15 @@ bm-estoque (ERP BMsoft): só tabelas `sys_*`.
   (`server/certificado.ts`, cópia idêntica do erp-nfe, com `node-forge`) e nenhuma API devolve arquivo nem senha.
   Super: qualquer empresa; admin: só as do grupo dele. Cópia das tabelas antigas (`nfe_certificados`,
   `nfs_certificados`) em `../extras/2026-11-19_certificados_sys_empresas.sql`.
+  Aba Caixas (PDV) (`CaixasEmpresa.tsx`): os computadores do erp-pdv da empresa em `pdv_caixas` (SQL em
+  `erp-pdv/code/extras/2026-11-20_pdv_caixas.sql`), com número sequencial, usuário opcional e token `NNNN-NNNN`. O
+  token é digitado uma vez no login do PDV ("Registrar"); o erp-pdv só confere (`server/caixas.ts` de lá), quem
+  cadastra é o Master. O token vale para um computador só (o PDV consome no registro, `registrado_em`); "Gerar novo" troca o token, desliga o computador registrado e libera um novo registro. Servidor, loja e terminal do SiTEF (`sitef_ip`, `sitef_loja`, `sitef_terminal`, SQL em `erp-pdv/code/extras/2026-11-20_pdv_caixas_sitef.sql`): os três ou nenhum; preenchidos, o erp-pdv passa cartão e PIX pelo TEF. Lista e formulário pelo `CadastroCrm` embutido; excluir inativa.
+  Aba Imagens do PDV (`ImagensPdvEmpresa.tsx`): vitrine da tela de venda do erp-pdv em `pdv_imagens` (SQL em
+  `erp-pdv/code/extras/2026-11-20_pdv_imagens.sql`): imagem, texto opcional sobre ela, período (início/fim vazios =
+  sem limite), ordem e ativo. A imagem é reduzida no navegador (WebP até 1200 px) e vai em base64 (rota com limite
+  de 4 MB); só sai pela rota da própria imagem, nunca na lista. Excluir apaga (imagem não tem movimentação).
+  `DateField.tsx` é cópia do erp-pdv (import do `INPUT_CLASS` trocado para `./FormCrm`).
 - Desenvolvedor (menu Cadastros, só o super): empresa desenvolvedora e arquitetura do PAF-NFC-e em `sys_paf`, uma
   linha só (`id = 1`) para todo o ERP; o erp-pdv lê dali o Menu Fiscal, o U2 do Arquivo I e o arqBD/arqSist do XML.
 - Tabelas: Grupos → `sys_grupos`; Empresas → `sys_empresas`; Usuários → `sys_usuarios` + `sys_usuarios_empresas`

@@ -1,5 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ArrowLeft, FileKey2, ShieldCheck, Trash2 } from 'lucide-react';
+import { ArrowLeft, FileKey2, Images, Monitor, ShieldCheck, Trash2 } from 'lucide-react';
+import { CaixasEmpresa } from './CaixasEmpresa';
+import { ImagensPdvEmpresa } from './ImagensPdvEmpresa';
 import { Tela, Cartao, Carregando } from './Tela';
 import { FormCrm, Campo, INPUT_CLASS, HINT_CLASS } from './FormCrm';
 import { Toast } from './AvisoErro';
@@ -14,6 +16,8 @@ import type { Empresa } from '../types';
  * Configurações de uma empresa: abre pela ação "Configurações" da lista de Empresas. Uma aba por assunto.
  * Certificados: o A1 (.pfx) da empresa (sys_empresas_certificados), usado pelo erp-nfe (NF-e/NFC-e) e pelo erp-nfs
  * (NFS-e). Só o Master grava.
+ * Caixas (PDV): os computadores do erp-pdv desta empresa e o token de registro de cada um (CaixasEmpresa).
+ * Imagens do caixa e da tela do cliente: vitrines de promoções e datas comemorativas do PDV (ImagensPdvEmpresa).
  */
 
 interface Envio {
@@ -50,7 +54,15 @@ const Linha: React.FC<{ rotulo: string; children: React.ReactNode }> = ({ rotulo
   </div>
 );
 
+const ABAS = [
+  ['certificados', ShieldCheck, 'Certificados'],
+  ['caixas', Monitor, 'Caixas (PDV)'],
+  ['imagens', Images, 'Imagens do caixa'],
+  ['imagensCliente', Images, 'Imagens da tela do cliente'],
+] as const;
+
 export const ConfiguracoesEmpresa: React.FC<{ empresa: Empresa; onVoltar: () => void }> = ({ empresa, onVoltar }) => {
+  const [aba, setAba] = useState<(typeof ABAS)[number][0]>('certificados');
   // undefined = carregando; null = sem certificado
   const [certificado, setCertificado] = useState<Certificado | null | undefined>(undefined);
   const [envio, setEnvio] = useState<Envio>(ENVIO_VAZIO);
@@ -103,14 +115,21 @@ export const ConfiguracoesEmpresa: React.FC<{ empresa: Empresa; onVoltar: () => 
       }
     >
       <div className="flex shrink-0 bg-stone-100 dark:bg-stone-950 border-b border-stone-200 dark:border-stone-800">
-        <div className={abaClasse(true) + ' px-4'}>
-          <span className={abaTexto(true)}>
-            <ShieldCheck className="w-3.5 h-3.5" />
-            Certificados
-          </span>
-        </div>
+        {ABAS.map(([chave, Icone, nome]) => (
+          <div key={chave} className={abaClasse(aba === chave) + ' px-4'}>
+            <span className={abaTexto(aba === chave)} onClick={() => setAba(chave)}>
+              <Icone className="w-3.5 h-3.5" />
+              {nome}
+            </span>
+          </div>
+        ))}
       </div>
 
+      {aba === 'imagens' || aba === 'imagensCliente' ? (
+        <ImagensPdvEmpresa key={aba} empresaId={empresa.id} tela={aba === 'imagens' ? 'caixa' : 'cliente'} />
+      ) : aba === 'caixas' ? (
+        <CaixasEmpresa empresaId={empresa.id} />
+      ) : (
       <FormCrm onSubmit={salvar} onCancel={limpar} saving={salvando} erro={erro} onFecharErro={() => setErro(null)} rodape={`Empresa #${empresa.id} • Certificados`}>
         {c === undefined ? (
           <Carregando />
@@ -169,6 +188,7 @@ export const ConfiguracoesEmpresa: React.FC<{ empresa: Empresa; onVoltar: () => 
           <input type="password" required autoComplete="new-password" value={envio.senha} onChange={(e) => setEnvio({ ...envio, senha: e.target.value })} className={INPUT_CLASS} />
         </Campo>
       </FormCrm>
+      )}
 
       {removendo && (
         <ConfirmDialog

@@ -15,6 +15,7 @@ const DICA_NIVEL: Record<Papel, string> = {
 };
 
 interface Form {
+  nome: string;
   login: string;
   senha: string;
   grupo_id: number | null;
@@ -55,10 +56,11 @@ export const Usuarios: React.FC<{ usuario: Usuario }> = ({ usuario }) => {
       subtitulo="Usuários do ERP: login do Master e dos módulos"
       registro="Usuário"
       inativa
-      nomeDe={(u) => u.login}
+      nomeDe={(u) => u.nome || u.login}
       colunas={[
         { key: 'id', label: 'ID', alinhar: 'numero', largura: 70 },
-        { key: 'login', label: 'Login', largura: 180 },
+        { key: 'nome', label: 'Nome', largura: 220 },
+        { key: 'login', label: 'Login', largura: 140 },
         { key: 'grupo_nome', label: 'Grupo', largura: 160 },
         { key: 'empresa_nome', label: 'Empresa principal', largura: 220 },
         { key: 'perfil_nome', label: 'Perfil', largura: 150 },
@@ -68,19 +70,22 @@ export const Usuarios: React.FC<{ usuario: Usuario }> = ({ usuario }) => {
       ]}
       novo={() => {
         const grupo_id = grupos.find((g) => g.ativo)?.id ?? null;
-        return { login: '', senha: '', grupo_id, empresa_id: principalDe(grupo_id), perfil_id: null, nivel: 'user', ativo: true, empresas: [] };
+        return { nome: '', login: '', senha: '', grupo_id, empresa_id: principalDe(grupo_id), perfil_id: null, nivel: 'user', ativo: true, empresas: [] };
       }}
       doRegistro={(u) => {
         // Liberações antigas de empresas de outro grupo saem ao gravar (só com as empresas carregadas: sem elas,
         // o filtro apagaria todas as liberações)
         const ids = doGrupo(u.grupo_id).map((e) => e.id);
         const liberadas = empresas.length ? u.empresas.filter((e) => ids.includes(e)) : u.empresas;
-        return { login: u.login, senha: '', grupo_id: u.grupo_id, empresa_id: u.empresa_id, perfil_id: u.perfil_id, nivel: u.nivel, ativo: !!u.ativo, empresas: liberadas };
+        return { nome: u.nome ?? '', login: u.login, senha: '', grupo_id: u.grupo_id, empresa_id: u.empresa_id, perfil_id: u.perfil_id, nivel: u.nivel, ativo: !!u.ativo, empresas: liberadas };
       }}
       campos={(f, alterar, editando) => (
         <>
+          <Campo rotulo="Nome" span={2}>
+            <input autoFocus required maxLength={150} value={f.nome} onChange={(e) => alterar({ nome: e.target.value })} className={INPUT_CLASS} />
+          </Campo>
           <Campo rotulo="Login">
-            <input autoFocus required maxLength={60} autoComplete="off" value={f.login} onChange={(e) => alterar({ login: e.target.value })} className={INPUT_CLASS} />
+            <input required maxLength={60} autoComplete="off" value={f.login} onChange={(e) => alterar({ login: e.target.value })} className={INPUT_CLASS} />
           </Campo>
           <Campo rotulo={editando ? 'Nova senha' : 'Senha'} dica={editando ? 'Em branco = não altera.' : 'Em branco = o usuário define no primeiro acesso.'}>
             <input type="password" autoComplete="new-password" value={f.senha} onChange={(e) => alterar({ senha: e.target.value })} className={INPUT_CLASS} />
