@@ -45,7 +45,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ avisoInicial, onLoginSucce
       <div className={`w-9 h-9 ${VISUAL_MASTER.fundo} rounded-xl flex items-center justify-center shadow-lg shadow-blue-200/50 dark:shadow-none shrink-0`}>
         <VISUAL_MASTER.Icone className="w-5 h-5 text-white" />
       </div>
-      <span className="text-sm font-black tracking-wider uppercase text-stone-800 dark:text-stone-100">ERP-Master</span>
+      <span className="text-sm font-black tracking-wider uppercase text-stone-800 dark:text-stone-100">BM-Master</span>
     </div>
   );
 
@@ -163,7 +163,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ avisoInicial, onLoginSucce
           </form>
 
           <div className="flex items-center justify-between mt-8 pt-4 border-t border-stone-200 dark:border-stone-800 text-[10px] font-bold uppercase tracking-wider text-stone-400 dark:text-stone-500">
-            <span>ERP-Master by BMsoft Sistemas</span>
+            <span>BM-Master by BMsoft Sistemas</span>
             <span className="normal-case">v{__APP_VERSION__} • © {new Date().getFullYear()}</span>
           </div>
         </div>

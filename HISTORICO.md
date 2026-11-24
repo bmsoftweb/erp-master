@@ -2,6 +2,10 @@
 
 Mais recente primeiro. PATCH a cada envio ao GitHub; MAJOR/MINOR só quando pedido.
 
+## 0.1.7 — 2026-11-23
+
+- Marca BM na tela: título da aba, login, menu e log do servidor voltam a "BM-Master".
+
 ## 0.1.6 — 2026-11-23
 
 - Nome "ERP-Master" no lugar de "BM-Master" (título, pacote, telas).
