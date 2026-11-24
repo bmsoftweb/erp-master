@@ -1,4 +1,4 @@
-# BM-Master (Gerenciador Web)
+# ERP-Master (Gerenciador Web)
 
 Cadastro central dos sistemas BMsoft: grupos, empresas, usuários, perfis e lançador de módulos.
 Vite + React + Express, deploy na Vercel.

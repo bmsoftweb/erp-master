@@ -10,7 +10,7 @@ import { simNao } from '../utils/formato';
 import { colunasPesquisa, criarPadraoPesquisa, excluirCampoPesquisa, padraoCamposPesquisa, listarCamposPesquisa, salvarCampoPesquisa, lerSqlPesquisa, padraoSqlPesquisa, rawSqlPesquisa, salvarSqlPesquisa, tabelasPesquisa, testarSqlPesquisa, type CampoPesquisa, type ColunaPesquisa } from '../services/api';
 
 /**
- * Campos extras das pesquisas do erp-vendas para o grupo (ven_pesquisa_campos; só o super).
+ * Campos extras das pesquisas do erp-vendas e do erp-compras (fornecedores) para o grupo (ven_pesquisa_campos; só o super).
  * O suporte escolhe tabela e coluna em listas; o erp-vendas monta o SQL. Lá, o usuário escolhe quais aparecem no grid
  * e em quais pesquisa ("Pesquisar em").
  * "Criar Pesquisa" grava os campos do sistema (linhas sem tabela) para o suporte renomear, mudar a pesquisa ou desligar.
@@ -20,6 +20,7 @@ const PESQUISAS = [
   { id: 'produtos', nome: 'Produtos' },
   { id: 'clientes', nome: 'Clientes' },
   { id: 'transportadoras', nome: 'Transportadoras' },
+  { id: 'fornecedores', nome: 'Fornecedores' },
 ];
 const FORMATOS: [string, string][] = [['', 'Texto'], ['moeda', 'Moeda'], ['qtd', 'Quantidade'], ['data', 'Data'], ['doc', 'CPF/CNPJ'], ['fone', 'Telefone'], ['simnao', 'Sim/Não']];
 const MODOS: [string, string][] = [['', 'Não pesquisa'], ['contem', 'Contém'], ['inicio', 'Começa com'], ['igual', 'Igual'], ['digitos', 'Só os números']];

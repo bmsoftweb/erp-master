@@ -48,6 +48,12 @@ export const Modulos: React.FC<{ nome?: string; onSair?: () => void; onAbrir: (m
     <Tela
       titulo={pai ? pai.descricao : 'Módulos'}
       subtitulo={pai ? pai.descricao_detalhada : 'Selecione um módulo para acessar as ferramentas de gestão.'}
+      centro={
+        // Nível user (sem o menu lateral, que tem a marca): BMsoft no topo
+        onSair && (
+          <img src="/bmsoft_logo.png" alt="BMsoft" className="h-7 w-auto" />
+        )
+      }
       acoes={
         <>
           {pilha.length > 1 && (

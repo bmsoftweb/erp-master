@@ -8,7 +8,8 @@ import { formatarDataHora, formatarTelefone, limparDigitos } from '../utils/form
 
 /**
  * Empresa desenvolvedora e arquitetura do PAF-NFC-e (sys_paf, uma linha para todo o ERP). O erp-pdv lê dali a
- * identificação do Menu Fiscal, o registro U2 do Arquivo I e o arqBD/arqSist do XML. Só o super.
+ * identificação do Menu Fiscal, o registro U2 do Arquivo I e o arqBD/arqSist do XML; erp-pdv e erp-vendas leem a versão
+ * do PAF (PAF único) para o verProc das notas. Só o super.
  */
 
 const VAZIO: Dados = {
@@ -21,6 +22,7 @@ const VAZIO: Dados = {
   desenvolvedor_responsavel: '',
   arq_bd: '',
   arq_sist: '',
+  versao: '',
 };
 
 export const Desenvolvedor: React.FC = () => {
@@ -92,8 +94,11 @@ export const Desenvolvedor: React.FC = () => {
           <Campo rotulo="Responsável técnico" span={2}>
             {texto('desenvolvedor_responsavel', 60)}
           </Campo>
-          <Campo rotulo="Endereço" span={4}>
+          <Campo rotulo="Endereço" span={3}>
             {texto('desenvolvedor_endereco', 150)}
+          </Campo>
+          <Campo rotulo="Versão do PAF-NFC-e" dica="Uma só para o erp-pdv e o erp-vendas: vai no verProc das notas e na identificação do Menu Fiscal. Atualizar a cada versão publicada.">
+            {texto('versao', 10, { required: true, placeholder: '0.1.6' })}
           </Campo>
           <Campo rotulo="Arquitetura do banco de dados" span={2} dica="Requisito VI, I, c: com o provedor quando na nuvem.">
             {texto('arq_bd', 120, { required: true })}

@@ -1,6 +1,6 @@
 {
-  "name": "bm-master",
-  "version": "0.1.5",
+  "name": "erp-master",
+  "version": "0.1.6",
   "private": true,
   "type": "module",
   "scripts": {

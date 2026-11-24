@@ -20,7 +20,7 @@ async function startServer() {
   }
 
   app.listen(PORT, '0.0.0.0', () => {
-    console.log(`BM-Master rodando em http://0.0.0.0:${PORT}`);
+    console.log(`ERP-Master rodando em http://0.0.0.0:${PORT}`);
     console.log(`MySQL: ${process.env.MYSQL_HOST} / ${process.env.MYSQL_DATABASE}`);
   });
 }

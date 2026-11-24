@@ -140,6 +140,8 @@ export interface Desenvolvedor {
   desenvolvedor_responsavel: string;
   arq_bd: string;
   arq_sist: string;
+  /** Versão do PAF-NFC-e: uma só para o erp-pdv e o erp-vendas (verProc e registro 3 do Menu Fiscal) */
+  versao: string;
   atualizado_em?: string | null;
 }
 export const lerDesenvolvedor = () => get<{ desenvolvedor: Desenvolvedor | null }>('/api/desenvolvedor');

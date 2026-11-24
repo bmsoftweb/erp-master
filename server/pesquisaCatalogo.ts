@@ -1,15 +1,17 @@
 import type { Pool } from 'mysql2/promise';
 
 /**
- * Catálogo das pesquisas configuráveis do erp-vendas (produtos, clientes e transportadoras) e a montagem do SQL.
+ * Catálogo das pesquisas configuráveis do erp-vendas e do erp-compras (produtos, clientes, transportadoras e fornecedores)
+ * e a montagem do SQL.
  *
  * ARQUIVO COMPARTILHADO, cópia idêntica em:
  *   erp-vendas/code/server/pesquisaCatalogo.ts  → roda a pesquisa (server/pesquisas.ts)
- *   bm-master/code/server/pesquisaCatalogo.ts   → Configurações > Pesquisas: tabelas, colunas, campos do sistema e o SQL (ver, editar, testar)
- * Mudou aqui, copie para o outro. Não importa nada de nenhum dos apps.
+ *   erp-compras/code/server/pesquisaCatalogo.ts → roda a pesquisa (server/pesquisas.ts)
+ *   erp-master/code/server/pesquisaCatalogo.ts   → Configurações > Pesquisas: tabelas, colunas, campos do sistema e o SQL (ver, editar, testar)
+ * Mudou aqui, copie para os outros. Não importa nada de nenhum dos apps.
  *
  * O catálogo é a lista fechada de colunas que a tela pode mostrar e de campos em que pode pesquisar: a tela só manda
- * chaves, e o SQL sai daqui. O suporte cadastra campos por grupo no BM-Master (ven_pesquisa_campos):
+ * chaves, e o SQL sai daqui. O suporte cadastra campos por grupo no ERP-Master (ven_pesquisa_campos):
  *   - linha sem tabela = campo do sistema (chave do catálogo): muda nome, pesquisa e "no grid"; inativa, sai da pesquisa;
  *   - linha com tabela = campo extra, só das `tabelas` do catálogo e de colunas que existem no banco.
  */
@@ -86,6 +88,7 @@ export const CATALOGOS: Record<string, Catalogo> = {
   // Clientes e quem não tem papel marcado
   clientes: pessoas('(p.is_cliente = 1 OR NOT (p.is_fornecedor OR p.is_transportadora OR p.is_colaborador))'),
   transportadoras: pessoas('p.is_transportadora = 1'),
+  fornecedores: pessoas('p.is_fornecedor = 1'),
   produtos: {
     id: 'pr.id',
     from: `cad_produtos pr
@@ -107,6 +110,8 @@ export const CATALOGOS: Record<string, Catalogo> = {
         label: 'Imagem', formato: 'imagem', alinhar: 'centro', largura: 80, visivel: true,
         sql: '(SELECT i.url FROM cad_produtos_imagens i WHERE i.produto_id = pr.id ORDER BY i.principal DESC, i.variante_id IS NOT NULL, i.ordem, i.id LIMIT 1)',
       },
+      // Código oficial do produto sem EAN (cProd, P2, D5): o id (Requisito VIII, I)
+      id: { label: 'Código', sql: 'pr.id', usa: 'cad_produtos.id', largura: 80, alinhar: 'numero', visivel: true, busca: 'igual', buscaPadrao: true },
       nome: { label: 'Produto', sql: 'pr.nome', usa: 'cad_produtos.nome', largura: 280, visivel: true, busca: 'contem', buscaPadrao: true },
       sku: { label: 'SKU', sql: 'pr.sku', usa: 'cad_produtos.sku', largura: 110, visivel: true, busca: 'inicio', buscaPadrao: true },
       codigo_barras: { label: 'Cód. barras', sql: 'pr.codigo_barras', usa: 'cad_produtos.codigo_barras', largura: 130, busca: 'igual', buscaPadrao: true },
@@ -122,6 +127,7 @@ export const CATALOGOS: Record<string, Catalogo> = {
            JOIN cad_produtos_localizacoes lc ON lc.id = s.localizacao_id
           WHERE l.produto_id = pr.id AND lc.empresa_id = ?)`,
       },
+      iat: { label: 'IAT', sql: 'pr.iat', usa: 'cad_produtos.iat', alinhar: 'centro', largura: 50 },
       preco_venda: { label: 'Preço', sql: 'pr.preco_venda', usa: 'cad_produtos.preco_venda', formato: 'moeda', alinhar: 'numero', largura: 100, visivel: true },
     },
   },
@@ -208,7 +214,7 @@ export function condicaoBusca(cat: Pick<Catalogo, 'campos'>, busca: string, chav
 }
 
 /**
- * SQL da pesquisa como modelo, o mesmo que o suporte vê e edita no BM-Master:
+ * SQL da pesquisa como modelo, o mesmo que o suporte vê e edita no ERP-Master:
  *   :empresa  → a filial do usuário (vira parâmetro)
  *   {filtros} → filtros da tela (ex.: produto × serviço)
  *   {busca}   → uma condição por palavra digitada, nos campos escolhidos em "Pesquisar em"
@@ -253,7 +259,7 @@ export const montarConsulta = <E>(cat: Catalogo, busca: string, chaves: string[]
   aplicarModelo(modeloSql(cat), cat, busca, chaves, filtrosTela, empresa);
 
 /**
- * SQL próprio do grupo (sys_grupos.config → pesquisas_sql.<pesquisa>, gravado pelo suporte no BM-Master).
+ * SQL próprio do grupo (sys_grupos.config → pesquisas_sql.<pesquisa>, gravado pelo suporte no ERP-Master).
  * Só um SELECT, sem `;` nem `?` (a filial é :empresa), sem gravar arquivo e sem colunas de senha/token;
  * roda numa transação somente leitura (executarLeitura). Texto do erro, ou null se serve.
  */

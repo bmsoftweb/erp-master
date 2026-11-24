@@ -2,6 +2,14 @@
 
 Mais recente primeiro. PATCH a cada envio ao GitHub; MAJOR/MINOR só quando pedido.
 
+## 0.1.6 — 2026-11-23
+
+- Nome "ERP-Master" no lugar de "BM-Master" (título, pacote, telas).
+- Desenvolvedor: campo "Versão do PAF-NFC-e" (`sys_paf.versao`).
+- Usuários: toggle e coluna "Usuário de balcão" (`sys_usuarios.balcao`).
+- Logo BMsoft centralizado no cabeçalho para o nível usuário.
+- Pesquisas: aba "Fornecedores" (usada pelo erp-compras).
+
 ## 0.1.5 — 2026-11-21
 
 - Configurações da empresa ganham abas: Caixas (PDV), com token de registro de cada computador, teclado virtual, TEF SiTEF e balança (velocidade e formato) por caixa; Imagens do caixa e Imagens da tela do cliente, vitrines do erp-pdv.

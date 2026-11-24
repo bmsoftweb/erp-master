@@ -884,7 +884,7 @@ export function createApp() {
   );
 
   // ---------- Desenvolvedor do PAF-NFC-e (sys_paf, uma linha para todo o ERP; lida pelo erp-pdv): só o super ----------
-  const CAMPOS_PAF = 'desenvolvedor_razao, desenvolvedor_cnpj, desenvolvedor_ie, desenvolvedor_im, desenvolvedor_endereco, desenvolvedor_telefone, desenvolvedor_responsavel, arq_bd, arq_sist, atualizado_em';
+  const CAMPOS_PAF = 'desenvolvedor_razao, desenvolvedor_cnpj, desenvolvedor_ie, desenvolvedor_im, desenvolvedor_endereco, desenvolvedor_telefone, desenvolvedor_responsavel, arq_bd, arq_sist, versao, atualizado_em';
   app.get(
     '/api/desenvolvedor',
     rota(async (_req, res) => {
@@ -910,6 +910,7 @@ export function createApp() {
         desenvolvedor_responsavel: texto(b.desenvolvedor_responsavel, 'Responsável técnico', 60),
         arq_bd: texto(b.arq_bd, 'Arquitetura do banco', 120, true),
         arq_sist: texto(b.arq_sist, 'Arquitetura do sistema', 120, true),
+        versao: texto(b.versao, 'Versão do PAF-NFC-e', 10, true),
       };
       await pool.query('INSERT INTO sys_paf SET ?, id = 1, criado_em = NOW() ON DUPLICATE KEY UPDATE ?, atualizado_em = NOW()', [p, p]);
     }),
@@ -944,7 +945,7 @@ export function createApp() {
       const f = usuariosAlteraveis(res, 'u.');
       const [rows] = await pool.query<Linha[]>(
         `SELECT u.id, u.login, u.nome, u.grupo_id, g.nome AS grupo_nome, u.empresa_id, COALESCE(NULLIF(e.nome_fantasia, ''), e.razao_social) AS empresa_nome,
-                u.perfil_id, p.nome AS perfil_nome, u.nivel, u.ativo, DATE_FORMAT(u.ultimo_acesso, '%Y-%m-%d %H:%i') AS ultimo_acesso,
+                u.perfil_id, p.nome AS perfil_nome, u.nivel, u.balcao, u.ativo, DATE_FORMAT(u.ultimo_acesso, '%Y-%m-%d %H:%i') AS ultimo_acesso,
                 (SELECT GROUP_CONCAT(ue.empresa_id) FROM sys_usuarios_empresas ue WHERE ue.usuario_id = u.id) AS empresas
            FROM sys_usuarios u LEFT JOIN sys_grupos g ON g.id = u.grupo_id LEFT JOIN sys_empresas e ON e.id = u.empresa_id
            LEFT JOIN sys_perfis p ON p.id = u.perfil_id
@@ -972,6 +973,8 @@ export function createApp() {
       empresa_id: id(b.empresa_id, 'Empresa principal'),
       perfil_id: b.perfil_id == null || b.perfil_id === '' ? null : id(b.perfil_id, 'Perfil'),
       nivel,
+      // Usuário de balcão (vendedor): no erp-vendas o pedido novo já vem como pré-venda
+      balcao: flag(b.balcao),
       ativo: flag(b.ativo),
     };
     if (codigo === eu.id && (nivel !== eu.role || !dados.ativo)) throw new ErroApi(400, 'Você não pode mudar o seu próprio nível nem se inativar.');

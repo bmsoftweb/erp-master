@@ -9,16 +9,18 @@ interface TelaProps {
   subtitulo?: React.ReactNode;
   /** Botões à direita do header (ex.: "Novo") */
   acoes?: React.ReactNode;
+  /** Conteúdo no meio do header (ex.: marca BMsoft na tela do nível user); some em tela estreita */
+  centro?: React.ReactNode;
   children: React.ReactNode;
 }
 
 /** Header da tela + área de trabalho com rolagem (padrão crmWeb) */
-export const Tela: React.FC<TelaProps> = ({ titulo, subtitulo, acoes, children }) => {
+export const Tela: React.FC<TelaProps> = ({ titulo, subtitulo, acoes, centro, children }) => {
   const abrirMenu = useContext(AbrirMenuMobile);
   return (
     <>
       <header className="h-[var(--altura-topo)] shrink-0 z-20 bg-white dark:bg-stone-900 border-b border-stone-200 dark:border-stone-800">
-        <div className="h-full px-4 sm:px-6 lg:px-8 flex items-center justify-between gap-3">
+        <div className="relative h-full px-4 sm:px-6 lg:px-8 flex items-center justify-between gap-3">
           <div className="flex items-center gap-3 min-w-0">
             {abrirMenu && (
               <button
@@ -34,6 +36,7 @@ export const Tela: React.FC<TelaProps> = ({ titulo, subtitulo, acoes, children }
               {subtitulo && <div className="text-[11px] text-stone-500 dark:text-stone-400 truncate hidden sm:block">{subtitulo}</div>}
             </div>
           </div>
+          {centro && <div className="hidden md:flex absolute left-1/2 -translate-x-1/2 items-center pointer-events-none">{centro}</div>}
           {acoes && <div className="flex items-center gap-2.5 shrink-0">{acoes}</div>}
         </div>
       </header>

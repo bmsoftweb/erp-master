@@ -79,7 +79,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, usuar
             <VISUAL_MASTER.Icone className="w-5 h-5" />
           </div>
           <div className={rec ? 'hidden' : 'min-w-0'}>
-            <h1 className="text-sm font-bold text-stone-900 dark:text-white leading-tight truncate">BM-Master</h1>
+            <h1 className="text-sm font-bold text-stone-900 dark:text-white leading-tight truncate">ERP-Master</h1>
             <p className="text-[11px] text-stone-500 dark:text-stone-400 truncate">Gerenciador Web</p>
           </div>
         </div>

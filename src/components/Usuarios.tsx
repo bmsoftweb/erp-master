@@ -22,6 +22,7 @@ interface Form {
   empresa_id: number | null;
   perfil_id: number | null;
   nivel: Papel;
+  balcao: boolean;
   ativo: boolean;
   empresas: number[];
 }
@@ -66,18 +67,19 @@ export const Usuarios: React.FC<{ usuario: Usuario }> = ({ usuario }) => {
         { key: 'perfil_nome', label: 'Perfil', largura: 150 },
         { key: 'nivel', label: 'Nível', alinhar: 'centro', largura: 120, render: (u) => NOME_PAPEL[u.nivel] ?? u.nivel },
         { key: 'ultimo_acesso', label: 'Último acesso', alinhar: 'centro', largura: 140, render: (u) => formatarDataHora(u.ultimo_acesso) },
+        { key: 'balcao', label: 'Balcão', alinhar: 'centro', largura: 80, render: (u) => simNao(u.balcao) },
         { key: 'ativo', label: 'Ativo', alinhar: 'centro', largura: 80, render: (u) => simNao(u.ativo) },
       ]}
       novo={() => {
         const grupo_id = grupos.find((g) => g.ativo)?.id ?? null;
-        return { nome: '', login: '', senha: '', grupo_id, empresa_id: principalDe(grupo_id), perfil_id: null, nivel: 'user', ativo: true, empresas: [] };
+        return { nome: '', login: '', senha: '', grupo_id, empresa_id: principalDe(grupo_id), perfil_id: null, nivel: 'user', balcao: false, ativo: true, empresas: [] };
       }}
       doRegistro={(u) => {
         // Liberações antigas de empresas de outro grupo saem ao gravar (só com as empresas carregadas: sem elas,
         // o filtro apagaria todas as liberações)
         const ids = doGrupo(u.grupo_id).map((e) => e.id);
         const liberadas = empresas.length ? u.empresas.filter((e) => ids.includes(e)) : u.empresas;
-        return { nome: u.nome ?? '', login: u.login, senha: '', grupo_id: u.grupo_id, empresa_id: u.empresa_id, perfil_id: u.perfil_id, nivel: u.nivel, ativo: !!u.ativo, empresas: liberadas };
+        return { nome: u.nome ?? '', login: u.login, senha: '', grupo_id: u.grupo_id, empresa_id: u.empresa_id, perfil_id: u.perfil_id, nivel: u.nivel, balcao: !!u.balcao, ativo: !!u.ativo, empresas: liberadas };
       }}
       campos={(f, alterar, editando) => (
         <>
@@ -138,6 +140,11 @@ export const Usuarios: React.FC<{ usuario: Usuario }> = ({ usuario }) => {
                 </option>
               ))}
             </select>
+          </Campo>
+          <Campo rotulo="Usuário de balcão" dica="Vendedor de balcão: no BM-Vendas o pedido novo já vem como pré-venda (senha para pagar no caixa).">
+            <div className="h-[34px] flex items-center">
+              <Toggle checked={f.balcao} onChange={(v) => alterar({ balcao: v })} />
+            </div>
           </Campo>
           <Campo rotulo="Ativo">
             <div className="h-[34px] flex items-center">

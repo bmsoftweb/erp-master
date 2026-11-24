@@ -63,6 +63,8 @@ export interface UsuarioLista {
   perfil_id: number | null;
   perfil_nome: string | null;
   nivel: Papel;
+  /** Usuário de balcão (vendedor): pedido novo do erp-vendas já como pré-venda */
+  balcao: number;
   ativo: number;
   /** "aaaa-mm-dd hh:mm" (ordena certo na lista; formatado na tela) */
   ultimo_acesso: string | null;

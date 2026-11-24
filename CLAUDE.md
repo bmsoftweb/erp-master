@@ -1,4 +1,4 @@
-# BM-Master (Gerenciador Web)
+# ERP-Master (Gerenciador Web)
 
 @../../_claude/web.md
 
@@ -18,9 +18,9 @@ bm-estoque (ERP BMsoft): só tabelas `sys_*`.
 - Empresas não tem item no menu: abre pela ação "Empresas" da lista de Grupos, sempre filtrada pelo grupo (sem
   desfiltrar; "← Grupos" ou o menu voltam).
 - Configurações (`sys_grupos.config`, uma aba por módulo) também não tem item no menu: abre pela ação "Configurações"
-  da lista de Grupos, sempre de um grupo. A aba Pesquisas (campos extras das pesquisas do erp-vendas,
-  `ven_pesquisa_campos`) é só do super. O catálogo e o SQL das pesquisas ficam em `server/pesquisaCatalogo.ts`, cópia
-  idêntica do arquivo do erp-vendas (mudou num, copie para o outro). "Ver SQL" mostra e edita a consulta que o
+  da lista de Grupos, sempre de um grupo. A aba Pesquisas (campos extras das pesquisas do erp-vendas e da de
+  fornecedores do erp-compras, `ven_pesquisa_campos`) é só do super. O catálogo e o SQL das pesquisas ficam em
+  `server/pesquisaCatalogo.ts`, cópia idêntica do arquivo do erp-vendas e do erp-compras (mudou num, copie para os outros). "Ver SQL" mostra e edita a consulta que o
   erp-vendas roda para o grupo: o SQL próprio (marcadores `:empresa`, `{filtros}`, `{busca}`) fica em
   `sys_grupos.config.pesquisas_sql.<pesquisa>`, só SELECT, testado antes de gravar e rodado em transação somente
   leitura; se falhar no erp-vendas, ele usa o padrão e registra no log. A aba "Raw" mostra o SQL final (só leitura,
