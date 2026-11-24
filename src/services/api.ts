@@ -70,6 +70,40 @@ export const gravarCertificado = (empresaId: number, dados: { arquivo: string; n
   chamar<void>('PUT', `/api/empresas/${empresaId}/certificado`, dados);
 export const removerCertificado = (empresaId: number) => chamar<void>('DELETE', `/api/empresas/${empresaId}/certificado`);
 
+// ---------- Contas de e-mail da empresa (sys_empresas_smtp: o erp-nfe e o erp-compras leem dali) ----------
+/** Conta como vem da lista (sem a senha); atualizado_em "aaaa-mm-dd hh:mm" */
+export interface ContaSmtp {
+  id: number;
+  finalidade: string;
+  host: string;
+  porta: number;
+  usuario: string | null;
+  remetente: string | null;
+  responder_para: string | null;
+  usa_ssl: number;
+  usa_tls: number;
+  tem_senha: number;
+  atualizado_em: string;
+}
+/** O que a tela manda; senha em branco mantém a gravada */
+export interface FormSmtp {
+  finalidade: string;
+  host: string;
+  porta: string;
+  usuario: string;
+  senha: string;
+  remetente: string;
+  responder_para: string;
+  usa_ssl: boolean;
+  usa_tls: boolean;
+}
+export const listarSmtp = (empresaId: number) => get<ContaSmtp[]>(`/api/empresas/${empresaId}/smtp`);
+export const salvarSmtp = (empresaId: number, smtpId: number | null, dados: FormSmtp) =>
+  smtpId === null ? chamar<void>('POST', `/api/empresas/${empresaId}/smtp`, dados) : chamar<void>('PUT', `/api/empresas/${empresaId}/smtp/${smtpId}`, dados);
+export const excluirSmtp = (empresaId: number, smtpId: number) => chamar<void>('DELETE', `/api/empresas/${empresaId}/smtp/${smtpId}`);
+/** id: a conta em edição (para usar a senha gravada quando a da tela está em branco) */
+export const testarSmtp = (empresaId: number, dados: FormSmtp & { id?: number }) => chamar<void>('POST', `/api/empresas/${empresaId}/smtp/testar`, dados);
+
 // ---------- Caixas do PDV da empresa (pdv_caixas: o erp-pdv confere o token no login) ----------
 /** Datas "aaaa-mm-dd hh:mm" */
 export interface CaixaPdv {

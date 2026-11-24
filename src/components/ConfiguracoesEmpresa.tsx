@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ArrowLeft, FileKey2, Images, Monitor, ShieldCheck, Trash2 } from 'lucide-react';
+import { ArrowLeft, FileKey2, Images, Mail, Monitor, ShieldCheck, Trash2 } from 'lucide-react';
 import { CaixasEmpresa } from './CaixasEmpresa';
+import { SmtpEmpresa } from './SmtpEmpresa';
 import { ImagensPdvEmpresa } from './ImagensPdvEmpresa';
 import { Tela, Cartao, Carregando } from './Tela';
 import { FormCrm, Campo, INPUT_CLASS, HINT_CLASS } from './FormCrm';
@@ -16,6 +17,7 @@ import type { Empresa } from '../types';
  * Configurações de uma empresa: abre pela ação "Configurações" da lista de Empresas. Uma aba por assunto.
  * Certificados: o A1 (.pfx) da empresa (sys_empresas_certificados), usado pelo erp-nfe (NF-e/NFC-e) e pelo erp-nfs
  * (NFS-e). Só o Master grava.
+ * E-mail (SMTP): o servidor de envio da empresa (sys_empresas_smtp), lido pelo erp-nfe e pelo erp-compras (SmtpEmpresa).
  * Caixas (PDV): os computadores do erp-pdv desta empresa e o token de registro de cada um (CaixasEmpresa).
  * Imagens do caixa e da tela do cliente: vitrines de promoções e datas comemorativas do PDV (ImagensPdvEmpresa).
  */
@@ -56,6 +58,7 @@ const Linha: React.FC<{ rotulo: string; children: React.ReactNode }> = ({ rotulo
 
 const ABAS = [
   ['certificados', ShieldCheck, 'Certificados'],
+  ['smtp', Mail, 'E-mail (SMTP)'],
   ['caixas', Monitor, 'Caixas (PDV)'],
   ['imagens', Images, 'Imagens do caixa'],
   ['imagensCliente', Images, 'Imagens da tela do cliente'],
@@ -127,6 +130,8 @@ export const ConfiguracoesEmpresa: React.FC<{ empresa: Empresa; onVoltar: () => 
 
       {aba === 'imagens' || aba === 'imagensCliente' ? (
         <ImagensPdvEmpresa key={aba} empresaId={empresa.id} tela={aba === 'imagens' ? 'caixa' : 'cliente'} />
+      ) : aba === 'smtp' ? (
+        <SmtpEmpresa empresaId={empresa.id} />
       ) : aba === 'caixas' ? (
         <CaixasEmpresa empresaId={empresa.id} />
       ) : (

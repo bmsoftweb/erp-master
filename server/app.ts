@@ -2,13 +2,14 @@ import 'dotenv/config';
 import express, { NextFunction, Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
+import nodemailer from 'nodemailer';
 import type { ResultSetHeader, RowDataPacket } from 'mysql2';
 import { pool } from './db.js';
 import { emitirToken, lerToken } from './sessao.js';
 import { carregarPfx } from './certificado.js';
 import { CATALOGOS, COLUNAS_BLOQUEADAS, FORMATOS, MODOS, aplicarModelo, catalogoDoGrupo, executarLeitura, modeloSql, validarSqlProprio } from './pesquisaCatalogo.js';
 import { cnpjValido, limparCnpj } from '../src/utils/cnpj.js';
-import { TIPOS_ATUACAO, UFS } from '../src/utils/listas.js';
+import { FINALIDADES_SMTP, TIPOS_ATUACAO, UFS } from '../src/utils/listas.js';
 
 type Linha = RowDataPacket & Record<string, unknown>;
 
@@ -708,6 +709,97 @@ export function createApp() {
       const empresaId = await empresaPermitida(res, id(req.params.id));
       const [r] = await pool.query<ResultSetHeader>('DELETE FROM sys_empresas_certificados WHERE empresa_id = ?', [empresaId]);
       if (!r.affectedRows) throw new ErroApi(404, 'Certificado não encontrado.');
+    }),
+  );
+
+  // ---------- Contas de e-mail da empresa (sys_empresas_smtp; SQL em ../extras/2026-11-24_smtp_*.sql) ----------
+  // Uma por finalidade (FINALIDADES_SMTP): o módulo usa a da sua finalidade e, sem ela, a 'padrao'. Lidas pelo erp-nfe
+  // (XML/DANFE, inclusive os do erp-pdv) e pelo erp-compras (cotações). Senha em texto, como o certificado (os módulos
+  // autenticam com ela); nenhuma rota a devolve. Mesmas permissões do certificado. Excluir apaga (não há movimentação).
+  /** Corpo da tela → linha da tabela; senha em branco mantém a gravada (fica de fora) */
+  const smtpDoCorpo = (b: any) => {
+    const porta = Number(b.porta) || (flag(b.usa_ssl) ? 465 : 587);
+    if (!Number.isInteger(porta) || porta < 1 || porta > 65535) throw new ErroApi(400, 'Porta inválida.');
+    const finalidade = String(b.finalidade || '');
+    if (!FINALIDADES_SMTP[finalidade]) throw new ErroApi(400, 'Escolha a finalidade da conta.');
+    const senha = typeof b.senha === 'string' && b.senha ? b.senha : undefined;
+    if (senha && senha.length > 255) throw new ErroApi(400, 'Senha: no máximo 255 caracteres.');
+    return {
+      finalidade,
+      host: texto(b.host, 'Servidor SMTP', 255, true),
+      porta,
+      usuario: opcional(b.usuario, 'Usuário', 255),
+      remetente: opcional(b.remetente, 'Remetente', 255),
+      responder_para: opcional(b.responder_para, 'Responder para', 255),
+      usa_ssl: flag(b.usa_ssl),
+      usa_tls: flag(b.usa_tls),
+      ...(senha !== undefined && { senha }),
+    };
+  };
+  const gravarSmtp = async (req: Request, res: Response, smtpId: number | null) => {
+    const empresaId = await empresaPermitida(res, id(req.params.id));
+    const s = smtpDoCorpo(req.body || {});
+    try {
+      if (smtpId === null) {
+        await pool.query('INSERT INTO sys_empresas_smtp SET ?, empresa_id = ?', [s, empresaId]);
+      } else {
+        const [r] = await pool.query<ResultSetHeader>('UPDATE sys_empresas_smtp SET ? WHERE id = ? AND empresa_id = ?', [s, smtpId, empresaId]);
+        if (!r.affectedRows) throw new ErroApi(404, 'Conta de e-mail não encontrada.');
+      }
+    } catch (err) {
+      if ((err as { code?: string }).code === 'ER_DUP_ENTRY') throw new ErroApi(400, `Já existe uma conta para ${FINALIDADES_SMTP[s.finalidade]} nesta empresa.`);
+      throw err;
+    }
+  };
+
+  app.get(
+    '/api/empresas/:id/smtp',
+    rota(async (req, res) => {
+      const empresaId = await empresaPermitida(res, id(req.params.id));
+      return (
+        await pool.query<Linha[]>(
+          `SELECT id, finalidade, host, porta, usuario, remetente, responder_para, usa_ssl, usa_tls,
+                  senha IS NOT NULL AND senha <> '' AS tem_senha, DATE_FORMAT(atualizado_em, '%Y-%m-%d %H:%i') AS atualizado_em
+             FROM sys_empresas_smtp WHERE empresa_id = ? ORDER BY finalidade <> 'padrao', finalidade`,
+          [empresaId],
+        )
+      )[0];
+    }),
+  );
+  app.post('/api/empresas/:id/smtp', rota((req, res) => gravarSmtp(req, res, null)));
+  app.put('/api/empresas/:id/smtp/:smtpId', rota((req, res) => gravarSmtp(req, res, id(req.params.smtpId))));
+  app.delete(
+    '/api/empresas/:id/smtp/:smtpId',
+    rota(async (req, res) => {
+      const empresaId = await empresaPermitida(res, id(req.params.id));
+      const [r] = await pool.query<ResultSetHeader>('DELETE FROM sys_empresas_smtp WHERE id = ? AND empresa_id = ?', [id(req.params.smtpId), empresaId]);
+      if (!r.affectedRows) throw new ErroApi(404, 'Conta de e-mail não encontrada.');
+    }),
+  );
+  /** Conecta e autentica com o que está na tela (senha em branco = a gravada da conta `id`), sem enviar e-mail */
+  app.post(
+    '/api/empresas/:id/smtp/testar',
+    rota(async (req, res) => {
+      const empresaId = await empresaPermitida(res, id(req.params.id));
+      const s = smtpDoCorpo(req.body || {});
+      const smtpId = Number(req.body?.id) || 0;
+      const senha =
+        s.senha ??
+        (await pool.query<Linha[]>('SELECT senha FROM sys_empresas_smtp WHERE id = ? AND empresa_id = ?', [smtpId, empresaId]))[0][0]?.senha ??
+        '';
+      const transporte = nodemailer.createTransport({
+        host: s.host,
+        port: s.porta,
+        secure: !!s.usa_ssl || s.porta === 465,
+        requireTLS: !!s.usa_tls && !s.usa_ssl,
+        auth: s.usuario ? { user: s.usuario, pass: senha } : undefined,
+        connectionTimeout: 15_000,
+      });
+      try {
+        await transporte.verify();
+      } catch (err) {
+        throw new ErroApi(400, `O servidor recusou a conexão: ${(err as Error).message}`);
+      }
     }),
   );
 

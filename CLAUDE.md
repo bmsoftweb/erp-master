@@ -35,6 +35,15 @@ bm-estoque (ERP BMsoft): só tabelas `sys_*`.
   (`server/certificado.ts`, cópia idêntica do erp-nfe, com `node-forge`) e nenhuma API devolve arquivo nem senha.
   Super: qualquer empresa; admin: só as do grupo dele. Cópia das tabelas antigas (`nfe_certificados`,
   `nfs_certificados`) em `../extras/2026-11-19_certificados_sys_empresas.sql`.
+  Aba E-mail (SMTP) (`SmtpEmpresa.tsx`): as contas de envio da empresa em `sys_empresas_smtp` (SQL em
+  `../extras/2026-11-24_smtp_sys_empresas.sql` e `..._smtp_finalidades.sql`), uma por finalidade (`FINALIDADES_SMTP` em
+  `src/utils/listas.ts`: padrao, nfe, compras, crm_comercial, crm_suporte). Cada módulo usa a conta da sua finalidade
+  e, sem ela, a `padrao` (o suporte do CRM passa antes pela crm_comercial): o erp-nfe (XML/DANFE, também os do
+  erp-pdv), o erp-compras (cotações) e o erp-crm só leem dali; no erp-nfe ficaram só o assunto e
+  a mensagem da NF-e. "Responder para" vai no Reply-To (no compras, o e-mail do comprador tem preferência). Senha em
+  texto (os módulos autenticam com ela), nunca volta para a tela; em branco mantém a gravada. "Testar conexão" usa o
+  que está na tela. Lista e formulário pelo `CadastroCrm` embutido; excluir apaga. Mesmas permissões do certificado.
+  A leitura de respostas por IMAP (pesquisa de satisfação, ainda não portada do bm-crm) vai pedir `imap_host`/`imap_porta`.
   Aba Caixas (PDV) (`CaixasEmpresa.tsx`): os computadores do erp-pdv da empresa em `pdv_caixas` (SQL em
   `erp-pdv/code/extras/2026-11-20_pdv_caixas.sql`), com número sequencial, usuário opcional e token `NNNN-NNNN`. O
   token é digitado uma vez no login do PDV ("Registrar"); o erp-pdv só confere (`server/caixas.ts` de lá), quem

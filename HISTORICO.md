@@ -2,6 +2,10 @@
 
 Mais recente primeiro. PATCH a cada envio ao GitHub; MAJOR/MINOR só quando pedido.
 
+## 0.1.8 — 2026-11-24
+
+- Configurações da empresa: aba "E-mail (SMTP)" com as contas de envio da empresa (`sys_empresas_smtp`), uma por finalidade (Padrão, NF-e, Compras, CRM comercial, CRM suporte), "Responder para" e "Testar conexão". O erp-nfe, o erp-compras e o erp-crm passam a ler dali.
+
 ## 0.1.7 — 2026-11-23
 
 - Marca BM na tela: título da aba, login, menu e log do servidor voltam a "BM-Master".
